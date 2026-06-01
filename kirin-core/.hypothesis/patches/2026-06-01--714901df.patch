@@ -1,0 +1,20 @@
+From HEAD Mon Sep 17 00:00:00 2001
+From: Hypothesis 6.100.0 <no-reply@hypothesis.works>
+Date: Mon, 01 Jun 2026 03:04:26
+Subject: [PATCH] Hypothesis: add explicit examples
+
+---
+--- tests/test_properties_core.py
++++ tests/test_properties_core.py
+@@ -131,6 +131,11 @@
+     topic=st.sampled_from(["lead.created", "agent.completed", "message.sent"]),
+ )
+ @settings(max_examples=100)
++@example(
++    mid='374f469f-e3e0-1eda-da6b-b5639dfcfbd4',
++    payload={},
++    topic='lead.created',
++).via('discovered failure')
+ async def test_p4_event_bus_publish_idempotent(mid, payload, topic):
+     """Feature: kirin-runtime, Property 4: Idempotência de Publicação no Event Bus"""
+     from core.bus.event_bus import EventBus, Event

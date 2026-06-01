@@ -1,0 +1,19 @@
+From HEAD Mon Sep 17 00:00:00 2001
+From: Hypothesis 6.100.0 <no-reply@hypothesis.works>
+Date: Mon, 01 Jun 2026 03:02:53
+Subject: [PATCH] Hypothesis: add explicit examples
+
+---
+--- tests/test_properties_core.py
++++ tests/test_properties_core.py
+@@ -348,6 +348,10 @@
+     secret_name=st.text(min_size=1, max_size=32),
+ )
+ @settings(max_examples=100)
++@example(
++    agent_id='0',  # or any other generated value
++    secret_name='=',
++).via('discovered failure')
+ def test_p13_secret_vault_no_value_in_audit(agent_id, secret_name):
+     """Feature: kirin-runtime, Property 13: Secret Vault Não Expõe Valores"""
+     import os

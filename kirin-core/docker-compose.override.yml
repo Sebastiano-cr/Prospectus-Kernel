@@ -1,0 +1,54 @@
+services:
+  kirin-core:
+    build: ./kirin-core
+    ports:
+      - "8001:8001"
+    environment:
+      - LITELLM_URL=http://litellm:4000
+      - REDIS_URL=redis://redis:6379
+      - POSTGRES_URL=postgresql://kirin:${POSTGRES_PASSWORD}@postgres:5432/kirin_core
+      - QDRANT_URL=http://qdrant:6333
+      - LANGFUSE_HOST=http://langfuse:3000
+      - MVP_AGENTS_URL=http://agents:8000
+      - SECRET_VAULT_KEY=${SECRET_VAULT_KEY}
+      - AGENT_HEARTBEAT_TIMEOUT=300
+      - AGENT_MAX_HEARTBEAT_RENEWALS=5
+      - FALLBACK_PROVIDER=ollama/llama3.2
+    depends_on:
+      - litellm
+      - redis
+      - postgres
+      - qdrant
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=kirin_core
+      - POSTGRES_USER=kirin
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.9.0
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+  langfuse:
+    image: langfuse/langfuse:2
+    ports:
+      - "3001:3000"
+    environment:
+      - DATABASE_URL=postgresql://kirin:${POSTGRES_PASSWORD}@postgres:5432/langfuse
+      - NEXTAUTH_SECRET=${LANGFUSE_SECRET}
+      - NEXTAUTH_URL=http://localhost:3001
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  qdrant_data:
