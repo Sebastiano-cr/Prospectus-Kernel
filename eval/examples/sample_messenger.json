@@ -1,0 +1,37 @@
+{
+  "output": {
+    "message": "Olá! Vi que vocês são especialistas em gastronomia e têm ótimas avaliações no Google Maps. Percebi que a ausência de presença digital poderia estar limitando seu alcance online. Temos soluções específicas para negócios como o seu que podem aumentar seus leads em até 40%. Que tal uma conversa rápida de 15 minutos nesta semana para mostrar como? Responda SAIR para não receber mais contatos."
+  },
+  "context": {
+    "lead": {
+      "name": "Bar do Zé",
+      "address": "Rua Augusta, 1234, São Paulo",
+      "phone": "+5511999887766"
+    },
+    "dossier": {
+      "pontos_fracos": ["sem presença no Instagram", "não possui site próprio"],
+      "oportunidades": ["marketing de proximidade", "eventos culturais"],
+      "maturidade_digital": 2
+    },
+    "expected_lang": "pt-BR",
+    "has_social_media": false
+  },
+  "tool_calls": [
+    {
+      "name": "complete",
+      "parameters": {
+        "model": "deepseek-chat",
+        "temperature": 0.7,
+        "max_tokens": 500
+      }
+    },
+    {
+      "name": "store",
+      "parameters": {
+        "namespace": "lead:ChIJN1t_tDeuEmsRUsoyG83frY4",
+        "key": "message",
+        "memory_type": "messaging"
+      }
+    }
+  ]
+}

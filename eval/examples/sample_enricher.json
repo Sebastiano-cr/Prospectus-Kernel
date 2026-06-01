@@ -1,0 +1,49 @@
+{
+  "output": {
+    "dossie": {
+      "resumo_perfil": "Bar do Zé é um estabelecimento tradicional na Rua Augusta, São Paulo, conhecido por seu ambiente descontraído e clientela fiel. O bar existe há mais de 15 anos e é ponto de encontro de moradores da região.",
+      "pontos_fracos": [
+        "sem presença no Instagram",
+        "não possui site próprio",
+        "cardápio não disponível online",
+        "falta sistema de delivery"
+      ],
+      "oportunidades": [
+        "marketing de proximidade com moradores da Augusta",
+        "eventos culturais e música ao vivo",
+        "parcerias com apps de delivery",
+        "criação de perfil no Instagram"
+      ],
+      "maturidade_digital": 2,
+      "resumo_executivo": "Estabelecimento tradicional com potencial significativo de crescimento digital. A ausência de presença online limita o alcance a novos clientes, mas a localização privilegiada e a reputação consolidada são ativos valiosos."
+    }
+  },
+  "context": {
+    "lead": {
+      "name": "Bar do Zé",
+      "address": "Rua Augusta, 1234, São Paulo",
+      "phone": "+5511999887766",
+      "city": "São Paulo"
+    },
+    "expected_lang": "pt-BR",
+    "has_social_media": false
+  },
+  "tool_calls": [
+    {
+      "name": "complete",
+      "parameters": {
+        "model": "qwen-vl-max",
+        "temperature": 0.3,
+        "max_tokens": 1000
+      }
+    },
+    {
+      "name": "store",
+      "parameters": {
+        "namespace": "lead:ChIJN1t_tDeuEmsRUsoyG83frY4",
+        "key": "enrichment",
+        "memory_type": "enrichment"
+      }
+    }
+  ]
+}
