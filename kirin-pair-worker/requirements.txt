@@ -1,0 +1,7 @@
+# Core dependencies
+redis>=4.5.0
+httpx>=0.24.0
+python-dotenv>=1.0.0
+
+# For video processing (we'll use subprocess to call ffmpeg)
+# No additional Python packages needed for basic ffmpeg calls

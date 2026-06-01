@@ -36,3 +36,10 @@ Thumbs.db
 
 # Docker compose backup
 docker-compose.yml.backup
+
+# Hypothesis
+.hypothesis/
+
+# IDE/Editor
+.kiro/
+.opencode/

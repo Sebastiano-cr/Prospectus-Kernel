@@ -1,0 +1,199 @@
+{
+  "name": "Webhook Handler - WhatsApp Response Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "whatsapp-webhook",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "responseData": {
+          "statusCode": 200,
+          "contentType": "text/plain",
+          "body": "ok"
+        }
+      },
+      "name": "WhatsApp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "message_body",
+              "value": "{{$json[\"textMessage\"]?.text || $json[\"message\"]?.text || \"\"}}"
+            }
+          ]
+        }
+      },
+      "name": "Extract Message",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Check if message contains SAIR (case-insensitive)\nconst message = items[0].json.message_body || '';\nconst isOptOut = message.toUpperCase().includes('SAIR');\n\nreturn [{\n  json: {\n    isOptOut: isOptOut,\n    messageBody: message,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Check Opt-Out",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "value": "={{ $json[\"isOptOut\"] }}",
+        "mode": "boolean",
+        "name": "Opt-Out Check"
+      },
+      "name": "Opt-Out Decision",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        850,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://agents:8000/crm_sync",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{ {\n  \"google_maps_id\": $json[\"google_maps_id\"],\n  \"status\": \"descartado\",\n  \"updated_at\": $now\n} }}\n"
+      },
+      "name": "Mark as Descartado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "lead_id",
+              "value": "{{$json[\"contactId\"] || $json[\"leadId\"] || \"\"}}"
+            }
+          ]
+        }
+      },
+      "name": "Extract Lead ID",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        450,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Look for lead ID in various possible fields\nconst contactId = items[0].json.contactId;\nconst leadId = items[0].json.leadId;\nconst from = items[0].json.from || '';\n\n// Try to extract ID from phone number or other fields\nlet extractedId = contactId || leadId;\n\nif (!extractedId && from) {\n  // Extract numeric part from phone number\n  const match = from.match(/\\d+/);\n  if (match) {\n    extractedId = match[0];\n  }\n}\n\nreturn [{\n  json: {\n    leadId: extractedId || 'unknown',\n    from: from\n  }\n}];"
+      },
+      "name": "Get Lead ID from Webhook",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        650,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://agents:8000/crm_sync",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{ {\n  \"google_maps_id\": $json[\"leadId\"],\n  \"status\": \"respondeu\",\n  \"updated_at\": $now\n} }}\n"
+      },
+      "name": "Mark as Responded",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        850,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "WhatsApp Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Message": {
+      "main": [
+        [
+          {
+            "node": "Check Opt-Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Opt-Out": {
+      "main": [
+        [
+          {
+            "node": "Opt-Out Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Opt-Out Decision": {
+      "main": [
+        [
+          {
+            "node": "Mark as Descartado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Lead ID",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Extract Lead ID": {
+      "main": [
+        [
+          {
+            "node": "Mark as Responded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}

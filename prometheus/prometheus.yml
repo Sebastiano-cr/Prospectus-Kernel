@@ -1,0 +1,29 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'kirin_agents'
+    static_configs:
+      - targets: ['agents:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'kirin_mcp_server'
+    static_configs:
+      - targets: ['mcp-server:3100']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'n8n'
+    static_configs:
+      - targets: ['n8n:5678']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # Optional: scrape Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: '/metrics'
+    scrape_interval: 15s

@@ -1,0 +1,38 @@
+groups:
+- name: kirin-alerts
+  rules:
+  - alert: HighErrorRate
+    expr: rate(kirin_errors_total[5m]) > 0.1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High error rate in Kirin platform"
+      description: "Error rate is above 10% for more than 5 minutes."
+
+  - alert: EnrichmentDown
+    expr: increase(kirin_enrichment_success_total[10m]) == 0
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Enrichment agent appears to be down"
+      description: "No successful enrichments in the last 10 minutes."
+
+  - alert: LowMessageSuccessRate
+    expr: rate(kirin_messages_sent_total{status="enviado"}[5m]) / rate(kirin_messages_sent_total[5m]) < 0.8
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Low WhatsApp message success rate"
+      description: "Less than 80% of WhatsApp messages are being sent successfully."
+
+  - alert: HighCRMSyncErrors
+    expr: rate(kirin_errors_total{component="crm_connector"}[5m]) > 0.05
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High CRM sync error rate"
+      description: "CRM sync error rate is above 5% for more than 5 minutes."

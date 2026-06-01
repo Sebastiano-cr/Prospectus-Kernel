@@ -1,0 +1,3 @@
+nome,telefone,endereco,avaliacao,pontuacao,faixa,mensagem,status
+Padaria Central,+551199999999,"Rua Augusta, 123",4.5,85,quente,Olá! Tudo bem?,ok
+Loja Teste,,,,,,,erro: HTTP 401
