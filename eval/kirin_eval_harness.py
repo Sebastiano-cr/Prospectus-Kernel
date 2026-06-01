@@ -808,6 +808,10 @@ class KirinEvalHarness:
     """
     Harness de avaliação do Kirin.
     Orquestra: input → processa → tool calls → output → judge → skeptic → report
+    
+    Modos de operação:
+    - sync: Usa rules-based judges (rápido, sem LLM)
+    - async: Usa model-graded judges via LLM (mais preciso, requer LITELLM)
     """
 
     DIMENSION_CONFIG = {
@@ -819,9 +823,18 @@ class KirinEvalHarness:
         Dimension.ARCHITECTURAL_READINESS: {"threshold": 85, "weight": 0.10},
     }
 
-    def __init__(self):
+    def __init__(self, use_llm_judge: bool = False):
         self.skeptic = SkepticAgent()
         self.judge_factory = JudgeFactory()
+        self.use_llm_judge = use_llm_judge
+        self._llm_judge = None
+
+    async def _get_llm_judge(self):
+        """Obtém instância do LLMJudge (lazy init)."""
+        if self._llm_judge is None:
+            from eval.llm_judge import get_llm_judge
+            self._llm_judge = get_llm_judge()
+        return self._llm_judge
 
     def evaluate_agent(
         self,
@@ -943,6 +956,136 @@ class KirinEvalHarness:
         report.recommendations = self._generate_recommendations(report, agent_name)
 
         return report
+
+    async def evaluate_agent_async(
+        self,
+        agent_name: str,
+        agent_output: Dict,
+        context: Dict,
+        tool_calls: List[Dict]
+    ) -> EvalReport:
+        """
+        Avalia um agente usando LLM judge (model-graded).
+        
+        Mais preciso que o evaluate_agent síncrono, mas requer LITELLM rodando.
+        """
+        report = EvalReport()
+
+        # Adicionar tool calls ao contexto
+        context["tool_calls"] = tool_calls
+
+        # --- FASE 1: SkepticAgent (Abdução) ---
+        skeptic_report = self.skeptic.check(agent_name, agent_output, context)
+        report.skeptic_reports.append(skeptic_report)
+
+        # --- FASE 2: LLM Judge (Model-Graded) ---
+        llm_judge = await self._get_llm_judge()
+        llm_result = await llm_judge.judge(agent_name, agent_output, context)
+
+        # --- FASE 3: Dimensões de Avaliação ---
+        # D1: Harness Integrity (baseado nas tool calls)
+        harness_score = self._eval_harness_integrity(tool_calls, agent_name)
+        report.dimension_results.append(DimensionResult(
+            dimension=Dimension.HARNESS_INTEGRITY,
+            score=harness_score,
+            threshold=self.DIMENSION_CONFIG[Dimension.HARNESS_INTEGRITY]["threshold"],
+            passed=harness_score >= self.DIMENSION_CONFIG[Dimension.HARNESS_INTEGRITY]["threshold"],
+            weight=self.DIMENSION_CONFIG[Dimension.HARNESS_INTEGRITY]["weight"],
+            observations=[f"Tool calls executadas: {len(tool_calls)}"]
+        ))
+
+        # D2: Intention Fidelity (baseado no LLM judge)
+        intention_score = llm_result.score
+        report.dimension_results.append(DimensionResult(
+            dimension=Dimension.INTENTION_FIDELITY,
+            score=intention_score,
+            threshold=self.DIMENSION_CONFIG[Dimension.INTENTION_FIDELITY]["threshold"],
+            passed=intention_score >= self.DIMENSION_CONFIG[Dimension.INTENTION_FIDELITY]["threshold"],
+            weight=self.DIMENSION_CONFIG[Dimension.INTENTION_FIDELITY]["weight"],
+            observations=[llm_result.explanation]
+        ))
+
+        # D3: Boundary Precision
+        boundary_score = self._eval_boundary_precision(agent_output, agent_name)
+        report.dimension_results.append(DimensionResult(
+            dimension=Dimension.BOUNDARY_PRECISION,
+            score=boundary_score,
+            threshold=self.DIMENSION_CONFIG[Dimension.BOUNDARY_PRECISION]["threshold"],
+            passed=boundary_score >= self.DIMENSION_CONFIG[Dimension.BOUNDARY_PRECISION]["threshold"],
+            weight=self.DIMENSION_CONFIG[Dimension.BOUNDARY_PRECISION]["weight"],
+            observations=["Boundary verificado via estrutura do output"]
+        ))
+
+        # D4: Abductive Resilience
+        abductive_score = int(skeptic_report.confidence * 100)
+        report.dimension_results.append(DimensionResult(
+            dimension=Dimension.ABDUCTIVE_RESILIENCE,
+            score=abductive_score,
+            threshold=self.DIMENSION_CONFIG[Dimension.ABDUCTIVE_RESILIENCE]["threshold"],
+            passed=abductive_score >= self.DIMENSION_CONFIG[Dimension.ABDUCTIVE_RESILIENCE]["threshold"],
+            weight=self.DIMENSION_CONFIG[Dimension.ABDUCTIVE_RESILIENCE]["weight"],
+            observations=skeptic_report.flags if skeptic_report.flags else ["Nenhuma flag de desconfiança"]
+        ))
+
+        # D5: Eval Harness (qualidade do próprio eval)
+        eval_score = self._eval_harness_quality_llm(llm_result, skeptic_report)
+        report.dimension_results.append(DimensionResult(
+            dimension=Dimension.EVAL_HARNESS,
+            score=eval_score,
+            threshold=self.DIMENSION_CONFIG[Dimension.EVAL_HARNESS]["threshold"],
+            passed=eval_score >= self.DIMENSION_CONFIG[Dimension.EVAL_HARNESS]["threshold"],
+            weight=self.DIMENSION_CONFIG[Dimension.EVAL_HARNESS]["weight"],
+            observations=[f"LLM Judge score={llm_result.score}, Skeptic confidence={skeptic_report.confidence}"]
+        ))
+
+        # D6: Architectural Readiness
+        arch_score = self._eval_architectural_readiness(agent_name, context)
+        report.dimension_results.append(DimensionResult(
+            dimension=Dimension.ARCHITECTURAL_READINESS,
+            score=arch_score,
+            threshold=self.DIMENSION_CONFIG[Dimension.ARCHITECTURAL_READINESS]["threshold"],
+            passed=arch_score >= self.DIMENSION_CONFIG[Dimension.ARCHITECTURAL_READINESS]["threshold"],
+            weight=self.DIMENSION_CONFIG[Dimension.ARCHITECTURAL_READINESS]["weight"],
+            observations=["Arquitetura hexagonal verificada via ports/adapters"]
+        ))
+
+        # --- FASE 4: Cálculo Final ---
+        overall = sum(d.score * d.weight for d in report.dimension_results)
+        report.overall_score = overall
+
+        # Verificar regras de ouro
+        abductive_dim = next((d for d in report.dimension_results if d.dimension == Dimension.ABDUCTIVE_RESILIENCE), None)
+        report.abductive_alert = abductive_dim.score < 70 if abductive_dim else False
+
+        if overall >= 80 and not report.abductive_alert:
+            report.status = "PASS"
+        elif overall >= 80 and report.abductive_alert:
+            report.status = "CONDITIONAL_PASS"
+        else:
+            report.status = "FAIL"
+
+        # Recomendações
+        report.recommendations = self._generate_recommendations(report, agent_name)
+
+        return report
+
+    def _eval_harness_quality_llm(self, llm_result, skeptic_report) -> int:
+        """Avalia qualidade do eval usando LLM judge."""
+        score = 100
+
+        # LLM deve dar explicação
+        if not llm_result.explanation or len(llm_result.explanation) < 10:
+            score -= 30
+
+        # LLM deve ter criteria_scores
+        if not llm_result.criteria_scores:
+            score -= 20
+
+        # Skeptic deve ter flags
+        if skeptic_report.flags is None:
+            score -= 15
+
+        return max(0, score)
 
     def _eval_harness_integrity(self, tool_calls: List[Dict], agent_name: str) -> int:
         """Avalia integridade da harness via tool calls."""
@@ -1093,12 +1236,13 @@ Exemplos:
     parser.add_argument("--context", help="Arquivo JSON com contexto adicional (lead, dossier, etc.)")
     parser.add_argument("--tool-calls", help="Arquivo JSON com lista de tool calls")
     parser.add_argument("--skeptic-only", action="store_true", help="Executa apenas o SkepticAgent")
+    parser.add_argument("--llm-judge", action="store_true", help="Usa LLM judge (model-graded) em vez de rules-based")
     parser.add_argument("--demo", action="store_true", help="Executa demo com dados de exemplo")
     parser.add_argument("--output", default="kirin_eval_report.json", help="Arquivo de saída do relatório")
 
     args = parser.parse_args()
 
-    harness = KirinEvalHarness()
+    harness = KirinEvalHarness(use_llm_judge=args.llm_judge)
 
     if args.demo:
         _run_demo(harness)
@@ -1133,6 +1277,28 @@ Exemplos:
         skeptic = SkepticAgent()
         report = skeptic.check(args.agent, agent_output, context)
         print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
+    elif args.llm_judge:
+        # Modo async com LLM judge
+        import asyncio
+        async def run_async():
+            report = await harness.evaluate_agent_async(args.agent, agent_output, context, tool_calls)
+            return report
+        report = asyncio.run(run_async())
+        print(report.to_json())
+
+        # Salvar relatório
+        with open(args.output, "w", encoding="utf-8") as f:
+            f.write(report.to_json())
+
+        print(f"\n✅ Relatório salvo em {args.output} (LLM Judge)")
+        print(f"📊 Score geral: {report.overall_score}/100")
+        print(f"🚩 Abductive Alert: {'SIM' if report.abductive_alert else 'NÃO'}")
+        print(f"📋 Status: {report.status}")
+
+        if report.recommendations:
+            print("\n🔧 Recomendações:")
+            for rec in report.recommendations:
+                print(f"  - {rec}")
     else:
         report = harness.evaluate_agent(args.agent, agent_output, context, tool_calls)
         print(report.to_json())

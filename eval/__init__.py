@@ -14,6 +14,12 @@ from .kirin_eval_harness import (
     EvalReport
 )
 
+from .llm_judge import (
+    LLMJudge,
+    LLMJudgeResult,
+    get_llm_judge
+)
+
 __all__ = [
     "KirinEvalHarness",
     "SkepticAgent",
@@ -22,5 +28,8 @@ __all__ = [
     "SkepticReport",
     "JudgeResult",
     "DimensionResult",
-    "EvalReport"
+    "EvalReport",
+    "LLMJudge",
+    "LLMJudgeResult",
+    "get_llm_judge"
 ]
