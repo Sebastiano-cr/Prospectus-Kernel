@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=kirin
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Please set POSTGRES_PASSWORD in .env}
+      - POSTGRES_DB=kirin
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis_data:/data
+
+  agents:
+    build:
+      context: ./agents
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=${PORT:-8000}
+      - LITELLM_URL=http://litellm:4000  # This will fail if litellm is not running, but we can still start the service
+      - QWEN_VL_MAX_API_KEY=${QWEN_VL_MAX_API_KEY}
+      - DEEPSEEK_CHAT_API_KEY=${DEEPSEEK_CHAT_API_KEY}
+      - MOONSHOT_V1_128K_API_KEY=${MOONSHOT_V1_128K_API_KEY}
+      - CRM_PROVIDER=${CRM_PROVIDER}
+      - NOTION_TOKEN=${NOTION_TOKEN}
+      - NOTION_DATABASE_ID=${NOTION_DATABASE_ID}
+      - AIRTABLE_API_KEY=${AIRTABLE_API_KEY}
+      - AIRTABLE_BASE_ID=${AIRTABLE_BASE_ID}
+      - NOCODB_URL=${NOCODB_URL}
+      - NOCODB_TOKEN=${NOCODB_TOKEN}
+      # New environment variables for the cognitive layer
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=kirin
+      - POSTGRES_USER=kirin
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Please set POSTGRES_PASSWORD in .env}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PYTHONPATH=/app
+    depends_on:
+      - postgres
+      - qdrant
+      - redis
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  redis_data:

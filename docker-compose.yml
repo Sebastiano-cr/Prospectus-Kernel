@@ -1,0 +1,155 @@
+version: '3.8'
+
+services:
+  litellm:
+    image: berriai/litellm:latest
+    ports:
+      - "4000:4000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - COHERE_API_KEY=${COHERE_API_KEY}
+      - REPLICATE_API_KEY=${REPLICATE_API_KEY}
+      - HF_API_KEY=${HF_API_KEY}
+      - VERTEXAI_PROJECT=${VERTEXAI_PROJECT}
+      - VERTEXAI_LOCATION=${VERTEXAI_LOCATION}
+      - VERTEXAI_CREDENTIALS=${VERTEXAI_CREDENTIALS}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION_NAME=${AWS_REGION_NAME}
+      - AZURE_API_KEY=${AZURE_API_KEY}
+      - AZURE_API_BASE=${AZURE_API_BASE}
+      - AZURE_API_VERSION=${AZURE_API_VERSION}
+    volumes:
+      - ./litellm_config.yml:/app/config.yaml
+
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - N8N_HOST=${N8N_HOST}
+      - N8N_PORT=${N8N_PORT}
+      - N8N_PROTOCOL=${N8N_PROTOCOL}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=${DB_POSTGRESDB_HOST}
+      - DB_POSTGRESDB_PORT=${DB_POSTGRESDB_PORT}
+      - DB_POSTGRESDB_DATABASE=${DB_POSTGRESDB_DATABASE}
+      - DB_POSTGRESDB_USER=${DB_POSTGRESDB_USER}
+      - DB_POSTGRESDB_PASSWORD=${DB_POSTGRESDB_PASSWORD}
+      - N8N_CONCURRENCY_PRODUCTION_LIMIT=${N8N_CONCURRENCY_PRODUCTION_LIMIT:-10}
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/home/node/.n8n/workflows
+
+  evolution-api:
+    image: atendesevolution/evolution-api:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_CONNECTION_URI=${DATABASE_CONNECTION_URI}
+      - DATABASE_CONNECTION=${DATABASE_CONNECTION}
+      - AUTHENTICATION_TYPE=${AUTHENTICATION_TYPE}
+      - AUTHENTICATION_PIN=${AUTHENTICATION_PIN}
+      - JWT_SECRET=${JWT_SECRET}
+      - SERVER_URL=${SERVER_URL}
+      - APP_ID=${APP_ID}
+      - APP_KEY=${APP_KEY}
+    volumes:
+      - ./evolution_data:/app/data
+
+  mongo:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - ./mongo_data:/data/db
+
+  mcp-server:
+    build:
+      context: ./mcp-server
+    ports:
+      - "3100:3100"
+    environment:
+      - MCP_PORT=${MCP_PORT:-3100}
+      - MAX_CONCURRENT_SESSIONS=${MAX_CONCURRENT_SESSIONS:-3}
+      - PLAYWRIGHT_TIMEOUT=${PLAYWRIGHT_TIMEOUT:-30000}
+      - INSTAGRAM_DECOY_USER=${INSTAGRAM_DECOY_USER}
+      - INSTAGRAM_DECOY_PASS=${INSTAGRAM_DECOY_PASS}
+      - INSTAGRAM_THIRD_PARTY_API_URL=${INSTAGRAM_THIRD_PARTY_API_URL}
+    depends_on:
+      - litellm
+
+  agents:
+    build:
+      context: ./agents
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=${PORT:-8000}
+      - LITELLM_URL=${LITELLM_URL:-http://litellm:4000}
+      - QWEN_VL_MAX_API_KEY=${QWEN_VL_MAX_API_KEY}
+      - DEEPSEEK_CHAT_API_KEY=${DEEPSEEK_CHAT_API_KEY}
+      - MOONSHOT_V1_128K_API_KEY=${MOONSHOT_V1_128K_API_KEY}
+      - CRM_PROVIDER=${CRM_PROVIDER}
+      - NOTION_TOKEN=${NOTION_TOKEN}
+      - NOTION_DATABASE_ID=${NOTION_DATABASE_ID}
+      - AIRTABLE_API_KEY=${AIRTABLE_API_KEY}
+      - AIRTABLE_BASE_ID=${AIRTABLE_BASE_ID}
+      - NOCODB_URL=${NOCODB_URL}
+      - NOCODB_TOKEN=${NOCODB_TOKEN}
+      - EVOLUTION_API_URL=${EVOLUTION_API_URL}
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+    depends_on:
+      - litellm
+      - mcp-server
+      - evolution-api
+      - mongo
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - ./prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3101:3101"
+    volumes:
+      - ./loki:/etc/loki
+      - ./loki_data:/loki
+    command: -config.file=/etc/loki/loki-config.yml
+
+  promtail:
+    image: grafana/promtail:latest
+    volumes:
+      - ./loki_data:/loki
+      - /var/log:/var/log
+      - ./loki:/etc/promtail
+    command: -config.file=/etc/promtail/config.yml
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+    volumes:
+      - ./grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+      - loki

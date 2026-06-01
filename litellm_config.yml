@@ -1,0 +1,13 @@
+model_list:
+  - model_name: qwen-vl-max
+    litellm_provider: dashscope
+    model: dashscope/qwen-vl-max
+    api_key: $QWEN_VL_MAX_API_KEY
+  - model_name: deepseek-chat
+    litellm_provider: deepseek
+    model: deepseek-chat
+    api_key: $DEEPSEEK_CHAT_API_KEY
+  - model_name: moonshot-v1-128k
+    litellm_provider: moonshot
+    model: moonshot-v1-128k
+    api_key: $MOONSHOT_V1_128K_API_KEY

@@ -1,0 +1,149 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Kirin Overview",
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Visão Geral do Pipeline",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "kirin_leads_extracted_total",
+            "legendFormat": "Leads extraídos",
+            "refId": "A"
+          },
+          {
+            "expr": "kirin_enrichment_success_total",
+            "legendFormat": "Enriquecimentos bem-sucedidos",
+            "refId": "B"
+          },
+          {
+            "expr": "kirin_lead_score",
+            "legendFormat": "Distribuição de scores",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 50
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Métricas de IA: Latência por Modelo",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(enrichment_latency_seconds_sum[5m]) / rate(enrichment_latency_seconds_count[5m])",
+            "legendFormat": "Qwen VL Max",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(scoring_latency_seconds_sum[5m]) / rate(scoring_latency_seconds_count[5m])",
+            "legendFormat": "DeepSeek",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(research_latency_seconds_sum[5m]) / rate(research_latency_seconds_count[5m])",
+            "legendFormat": "Moonshot Kimi K2",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "seconds"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "Métricas WhatsApp: Mensagens Enviadas/Hora por Faixa",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum by (faixa) (increase(kirin_messages_sent_total{status=\"enviado\"}[1h]))",
+            "legendFormat": "{{faixa}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 4,
+        "title": "Logs de Erros",
+        "type": "logs",
+        "targets": [
+          {
+            "expr": '{component=~".+"} |= "error"',
+            "legendFormat": "{{line}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {}
+          }
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      }
+    ],
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    }
+  },
+  "overwrite": true
+}

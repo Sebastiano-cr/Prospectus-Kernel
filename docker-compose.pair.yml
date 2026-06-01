@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  kirin-pair-backend:
+    build:
+      context: ./kirin-pair-backend
+    ports:
+      - "8002:8002"
+    environment:
+      - PORT=8002
+      - LITELLM_URL=http://litellm:4000
+      - QWEN_VL_MAX_API_KEY=${QWEN_VL_MAX_API_KEY}
+      - DEEPSEEK_CHAT_API_KEY=${DEEPSEEK_CHAT_API_KEY}
+      - MOONSHOT_V1_128K_API_KEY=${MOONSHOT_V1_128K_API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      # Database connection (reuse existing)
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=kirin
+      - POSTGRES_USER=kirin
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Please set POSTGRES_PASSWORD in .env}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - KIRIN_PLATFORM_URL=http://agents:8000
+    volumes:
+      - ./kirin-pair-backend:/app
+      - ./agents:/app/agents:ro
+    networks:
+      - kirin_default
+
+  kirin-pair-worker:
+    build:
+      context: ./kirin-pair-worker
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=kirin
+      - POSTGRES_USER=kirin
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Please set POSTGRES_PASSWORD in .env}
+      - WHISPER_URL=http://whisper-service:8003
+      - OUTPUT_DIR=/app/output
+    volumes:
+      - ./kirin-pair-worker/output:/app/output
+    depends_on:
+      - whisper-service
+    networks:
+      - kirin_default
+
+  whisper-service:
+    build:
+      context: ./whisper-service
+    ports:
+      - "8003:8003"
+    environment:
+      - PORT=8003
+    networks:
+      - kirin_default
+
+networks:
+  kirin_default:
+    external: true
