@@ -12,6 +12,7 @@ Diferente dos rules-based judges, estes usam o modelo para avaliar:
 import json
 import logging
 import os
+import asyncio
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
 
@@ -20,6 +21,9 @@ logger = logging.getLogger(__name__)
 # Configuração do LLM
 LITELLM_URL = os.getenv("LITELLM_URL", "http://litellm:4000")
 JUDGE_MODEL = os.getenv("KIRIN_JUDGE_MODEL", "deepseek-chat")
+JUDGE_TIMEOUT = int(os.getenv("KIRIN_JUDGE_TIMEOUT", "60"))
+JUDGE_MAX_RETRIES = int(os.getenv("KIRIN_JUDGE_MAX_RETRIES", "3"))
+JUDGE_RETRY_DELAY = float(os.getenv("KIRIN_JUDGE_RETRY_DELAY", "1.0"))
 
 
 @dataclass
@@ -65,7 +69,7 @@ class LLMJudge:
         return self._client
 
     async def _call_llm(self, prompt: str) -> str:
-        """Chama o LLM e retorna a resposta."""
+        """Chama o LLM com retry logic e retorna a resposta."""
         client = await self._get_client()
 
         payload = {
@@ -84,17 +88,33 @@ class LLMJudge:
             "max_tokens": 1000
         }
 
-        try:
-            response = await client.post(
-                f"{LITELLM_URL}/v1/chat/completions",
-                json=payload
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
-        except Exception as e:
-            logger.error(f"Erro ao chamar LLM judge: {e}")
-            return ""
+        last_error = None
+        for attempt in range(JUDGE_MAX_RETRIES):
+            try:
+                response = await asyncio.wait_for(
+                    client.post(
+                        f"{LITELLM_URL}/v1/chat/completions",
+                        json=payload
+                    ),
+                    timeout=JUDGE_TIMEOUT
+                )
+                response.raise_for_status()
+                data = response.json()
+                return data["choices"][0]["message"]["content"]
+            except asyncio.TimeoutError:
+                last_error = f"Timeout após {JUDGE_TIMEOUT}s (tentativa {attempt + 1}/{JUDGE_MAX_RETRIES})"
+                logger.warning(f"LLM judge timeout: {last_error}")
+            except Exception as e:
+                last_error = f"{e} (tentativa {attempt + 1}/{JUDGE_MAX_RETRIES})"
+                logger.warning(f"LLM judge error: {last_error}")
+
+            # Esperar antes de retry (exponential backoff)
+            if attempt < JUDGE_MAX_RETRIES - 1:
+                delay = JUDGE_RETRY_DELAY * (2 ** attempt)
+                await asyncio.sleep(delay)
+
+        logger.error(f"LLM judge falhou após {JUDGE_MAX_RETRIES} tentativas: {last_error}")
+        return ""
 
     def _build_enricher_prompt(self, output: Dict, context: Dict) -> str:
         """Constrói prompt para avaliar Enricher."""
