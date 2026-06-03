@@ -1,48 +1,119 @@
 """
-Pydantic schemas for Kirin platform API endpoints.
+Pydantic schemas for request validation.
+All POST endpoints use these schemas to validate input data.
 """
 from pydantic import BaseModel, Field
-from typing import Any, Dict, List, Optional
+from typing import Optional, Dict, Any
 
 
 class EnrichRequest(BaseModel):
-    """Request schema for POST /enrich."""
-    id: Optional[str] = None
-    google_maps_id: Optional[str] = None
-    name: str = ''
-    address: str = ''
-    phone: str = ''
-    website: str = ''
-    instagram_username: str = ''
-    google_maps_data: Dict[str, Any] = Field(default_factory=dict)
-    google_maps_rating: Optional[float] = None
-    google_maps_screenshot: Optional[str] = None
-    instagram_data: Dict[str, Any] = Field(default_factory=dict)
-    instagram_followers: Optional[int] = None
-    instagram_post_count: Optional[int] = None
-    instagram_last_post_date: Optional[str] = None
-    instagram_recent_images: List[str] = Field(default_factory=list)
-    instagram_inativo: bool = False
-    instagram_status: str = ''
-    instagram_screenshot: Optional[str] = None
-    website_screenshot: Optional[str] = None
+    """Schema for /enrich endpoint."""
+    lead_id: str = Field(..., min_length=1, max_length=100, description="Unique lead identifier")
+    name: str = Field(..., min_length=1, max_length=200, description="Business name")
+    address: str = Field(default="", max_length=500, description="Business address")
+    phone: str = Field(default="", max_length=20, description="Phone number")
+    website: str = Field(default="", max_length=500, description="Website URL")
+    instagram_username: str = Field(default="", max_length=100, description="Instagram username")
+    rating: Optional[float] = Field(default=None, ge=0, le=5, description="Google Maps rating")
+    google_maps_url: str = Field(default="", max_length=500, description="Google Maps URL")
+    
+    class Config:
+        extra = "forbid"  # Reject unknown fields
 
 
 class ScoreRequest(BaseModel):
-    """Request schema for POST /score."""
-    id: Optional[str] = None
-    name: str = ''
-    dossie: Dict[str, Any] = Field(default_factory=dict)
+    """Schema for /score endpoint."""
+    lead_id: str = Field(..., min_length=1, description="Unique lead identifier")
+    dossier: Dict[str, Any] = Field(..., description="Enrichment dossier")
+    
+    class Config:
+        extra = "forbid"
 
 
 class MessageRequest(BaseModel):
-    """Request schema for POST /generate_message."""
-    id: Optional[str] = None
-    name: str = ''
-    score: int = 0
-    faixa: str = ''
-    status: str = 'novo'
-    dossie: Dict[str, Any] = Field(default_factory=dict)
-    website: str = ''
-    instagram_username: str = ''
-    phone: str = ''
+    """Schema for /generate_message endpoint."""
+    lead_id: str = Field(..., min_length=1, description="Unique lead identifier")
+    name: str = Field(..., min_length=1, max_length=200, description="Business name")
+    score: int = Field(..., ge=0, le=100, description="Lead score")
+    faixa: str = Field(..., description="Score classification (frio/morno/quente)")
+    dossier: Dict[str, Any] = Field(..., description="Enrichment dossier")
+    
+    class Config:
+        extra = "forbid"
+
+
+class ResearchRequest(BaseModel):
+    """Schema for /research endpoint."""
+    lead_id: str = Field(..., min_length=1, description="Unique lead identifier")
+    name: str = Field(..., min_length=1, max_length=200, description="Business name")
+    address: str = Field(default="", max_length=500, description="Business address")
+    city: str = Field(default="", max_length=100, description="City")
+    
+    class Config:
+        extra = "forbid"
+
+
+class CRMSyncRequest(BaseModel):
+    """Schema for /crm_sync endpoint."""
+    lead_id: str = Field(..., min_length=1, description="Unique lead identifier")
+    action: str = Field(..., pattern="^(create|update|upsert)$", description="CRM action")
+    data: Dict[str, Any] = Field(..., description="Lead data to sync")
+    
+    class Config:
+        extra = "forbid"
+
+
+class DiscourseRequest(BaseModel):
+    """Schema for /discourse/ingest endpoint."""
+    text: str = Field(..., min_length=1, max_length=10000, description="Text to analyze")
+    source: str = Field(..., min_length=1, max_length=100, description="Source identifier")
+    context: str = Field(default="", max_length=1000, description="Additional context")
+    
+    class Config:
+        extra = "forbid"
+
+
+class LanguageGameRequest(BaseModel):
+    """Schema for /language_game/analyze endpoint."""
+    text: str = Field(..., min_length=1, max_length=10000, description="Text to analyze")
+    lead_id: str = Field(default="", max_length=100, description="Associated lead ID")
+    
+    class Config:
+        extra = "forbid"
+
+
+class ResonanceAnalyzeRequest(BaseModel):
+    """Schema for /resonance/analyze endpoint."""
+    analyses: list = Field(..., min_length=1, description="List of language game analyses")
+    market_cluster: str = Field(default="", max_length=100, description="Market cluster name")
+    
+    class Config:
+        extra = "forbid"
+
+
+class ResonanceLookupRequest(BaseModel):
+    """Schema for /resonance/lookup endpoint."""
+    query: str = Field(..., min_length=1, max_length=500, description="Search query")
+    limit: int = Field(default=5, ge=1, le=50, description="Max results to return")
+    
+    class Config:
+        extra = "forbid"
+
+
+class ResonanceProspectRequest(BaseModel):
+    """Schema for /resonance/prospect endpoint."""
+    cluster_id: str = Field(..., min_length=1, description="Cluster ID")
+    target_profile: dict = Field(..., description="Target profile")
+    
+    class Config:
+        extra = "forbid"
+
+
+class ResonanceRecordRequest(BaseModel):
+    """Schema for /resonance/record endpoint."""
+    text: str = Field(..., min_length=1, max_length=10000, description="Text to record")
+    lead_id: str = Field(default="", max_length=100, description="Associated lead ID")
+    source: str = Field(default="api", max_length=50, description="Source identifier")
+    
+    class Config:
+        extra = "forbid"

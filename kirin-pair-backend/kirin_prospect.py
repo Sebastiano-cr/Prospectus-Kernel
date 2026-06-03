@@ -36,7 +36,12 @@ import jwt
 # ---------------------------------------------------------------------------
 MCP_URL = os.getenv("MCP_URL", "http://localhost:3100")
 PAIR_URL = os.getenv("PAIR_URL", "http://localhost:8002")
-JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-this-in-production")
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError(
+        "JWT_SECRET não configurado. "
+        "Gere com: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+    )
 WORKSPACE_ID = os.getenv("WORKSPACE_ID", "default")
 OUTPUT_FILE = os.getenv("OUTPUT_CSV", "resultados.csv")
 

@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 from typing import Dict, Any, Optional
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Header, Depends
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Header, Depends, Request
 from fastapi.responses import JSONResponse
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 import uvicorn
@@ -17,6 +17,11 @@ from agents.scorer import score_lead
 from agents.messenger import generate_message, send_whatsapp_message
 from agents.researcher import research_lead
 from agents.crm_connector import get_crm_adapter
+from agents.schemas import (
+    EnrichRequest, ScoreRequest, MessageRequest, ResearchRequest,
+    CRMSyncRequest, DiscourseRequest, LanguageGameRequest,
+    ResonanceAnalyzeRequest, ResonanceLookupRequest, ResonanceProspectRequest, ResonanceRecordRequest
+)
 from agents.metrics import (
     kirin_leads_extracted_total,
     kirin_enrichment_success_total,
@@ -36,6 +41,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Kirin Agents API", description="API for Kirin platform agents")
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    """Global exception handler to mask internal errors."""
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Erro interno do servidor"}
+    )
 
 # Configuration from environment
 LITELLM_URL = os.getenv("LITELLM_URL", "http://litellm:4000")
@@ -64,39 +79,61 @@ REDIS_DB = int(os.getenv("REDIS_DB", "0"))
 
 # API Key authentication
 API_KEY = os.getenv("API_KEY", "")
+REQUIRE_AUTH = os.getenv("KIRIN_REQUIRE_AUTH", "true").lower() == "true"
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
 
 
 async def verify_api_key(x_api_key: str = Header(default="")):
-    """Verify API key from header. If API_KEY is not configured, allows all requests."""
+    """Verify API key from header. Requires KIRIN_REQUIRE_AUTH=true (default)."""
+    if not REQUIRE_AUTH:
+        return  # Dev mode: explicit opt-out via KIRIN_REQUIRE_AUTH=false
+    
     if not API_KEY:
-        return  # Dev mode: no auth required
+        raise HTTPException(
+            status_code=500,
+            detail="API_KEY não configurada. Defina a variável de ambiente API_KEY."
+        )
+    
     if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+        raise HTTPException(status_code=401, detail="API key inválida")
 
 
 class RateLimiter:
-    """Simple in-memory rate limiter using sliding window."""
+    """Simple in-memory rate limiter using sliding window with IP-based identification."""
     
-    def __init__(self, requests_per_minute: int):
+    def __init__(self, requests_per_minute: int, max_clients: int = 10000):
         self.requests_per_minute = requests_per_minute
+        self.max_clients = max_clients
         self.requests: Dict[str, list] = {}
+        import time
+        self.time = time
     
-    def _get_client_id(self, x_api_key: str, x_forwarded_for: Optional[str] = None) -> str:
-        """Get client identifier from API key or IP."""
-        if x_api_key:
-            return f"apikey:{x_api_key[:8]}"
-        if x_forwarded_for:
-            return f"ip:{x_forwarded_for.split(',')[0].strip()}"
-        return "ip:unknown"
+    def _get_client_id(self, client_ip: str) -> str:
+        """Get client identifier from IP address."""
+        return f"ip:{client_ip}"
     
-    async def check_rate_limit(self, x_api_key: str = "", x_forwarded_for: Optional[str] = None):
+    def _cleanup_old_clients(self):
+        """Remove old client entries to prevent memory leaks."""
+        if len(self.requests) > self.max_clients:
+            # Remove oldest 20% of clients
+            now = self.time.time()
+            sorted_clients = sorted(
+                self.requests.keys(),
+                key=lambda k: self.requests[k][0] if self.requests[k] else 0
+            )
+            for key in sorted_clients[:len(sorted_clients) // 5]:
+                del self.requests[key]
+    
+    async def check_rate_limit(self, client_ip: str = "unknown"):
         """Check if request is within rate limit. Raises HTTPException if exceeded."""
-        client_id = self._get_client_id(x_api_key, x_forwarded_for)
-        now = __import__('time').time()
+        client_id = self._get_client_id(client_ip)
+        now = self.time.time()
         window_start = now - 60
         
-        # Clean old requests
+        # Cleanup old clients periodically
+        self._cleanup_old_clients()
+        
+        # Clean old requests for this client
         if client_id in self.requests:
             self.requests[client_id] = [t for t in self.requests[client_id] if t > window_start]
         else:
@@ -117,11 +154,19 @@ rate_limiter = RateLimiter(RATE_LIMIT_PER_MINUTE)
 
 
 async def check_rate_limit(
-    x_api_key: str = Header(default=""),
+    request: "Request",
     x_forwarded_for: Optional[str] = Header(default=None)
 ):
-    """Dependency to check rate limit."""
-    await rate_limiter.check_rate_limit(x_api_key, x_forwarded_for)
+    """Dependency to check rate limit using client IP."""
+    # Use X-Forwarded-For if available (behind proxy), otherwise use client IP
+    if x_forwarded_for:
+        client_ip = x_forwarded_for.split(",")[0].strip()
+    elif request.client:
+        client_ip = request.client.host
+    else:
+        client_ip = "unknown"
+    
+    await rate_limiter.check_rate_limit(client_ip)
 
 # Initialize CRM adapter if provider is set
 crm_adapter = None
@@ -239,12 +284,12 @@ async def health_check():
     return {"status": status, "checks": checks}
 
 @app.post("/enrich")
-async def enrich_endpoint(lead: Dict[str, Any], _=Depends(verify_api_key), __=Depends(check_rate_limit)):
+async def enrich_endpoint(lead: EnrichRequest, _=Depends(verify_api_key), __=Depends(check_rate_limit)):
     """
     Enrich a lead using the Enricher agent.
     
     Args:
-        lead: Lead dictionary
+        lead: Lead data validated by EnrichRequest schema
         
     Returns:
         Enriched lead dictionary
@@ -253,18 +298,11 @@ async def enrich_endpoint(lead: Dict[str, Any], _=Depends(verify_api_key), __=De
         # Increment leads extracted counter
         kirin_leads_extracted_total.labels(source="api").inc()
         
-        # Get memory managers
-        memory_managers = get_memory_managers()
+        # Convert Pydantic model to dict for agent
+        lead_dict = lead.model_dump()
         
-        # Call the enricher agent with memory managers
-        # Note: We need to modify the enrich_lead function to accept memory managers.
-        # For now, we will call the existing function and then update it later.
-        # Let's update the agent functions to accept memory managers.
-        # We'll do that in the next step.
-        
-        # For now, we'll call the existing function without memory managers.
-        # We'll update the agent functions in the next batch of changes.
-        enriched_lead = await enrich_lead(lead, LITELLM_URL, QWEN_VL_MAX_API_KEY)
+        # Call the enricher agent
+        enriched_lead = await enrich_lead(lead_dict, LITELLM_URL, QWEN_VL_MAX_API_KEY)
         
         # Update metrics
         if enriched_lead.get("enrichment_success"):
@@ -272,39 +310,26 @@ async def enrich_endpoint(lead: Dict[str, Any], _=Depends(verify_api_key), __=De
         else:
             kirin_enrichment_failed_total.inc()
         
-        # Store enrichment result in memory if successful
-        if enriched_lead.get("enrichment_success") and lead.get("id"):
-            lead_id = lead["id"]
-            dossie = enriched_lead.get("dossie", {})
-            # We would store the dossie in memory, but we need to update the agent to return the dossie separately or we can extract it here.
-            # For now, we'll skip storing in memory until we update the agent to work with memory managers.
-            pass
-        
         return enriched_lead
     except Exception as e:
         logger.error(f"Error in enrich endpoint: {e}")
         kirin_errors_total.labels(component="enricher").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Erro interno no enriquecimento")
 
 @app.post("/score")
-async def score_endpoint(lead: Dict[str, Any], _=Depends(verify_api_key), __=Depends(check_rate_limit)):
+async def score_endpoint(lead: ScoreRequest, _=Depends(verify_api_key), __=Depends(check_rate_limit)):
     """
     Score a lead using the Scorer agent.
     
     Args:
-        lead: Lead dictionary with dossiê
+        lead: Lead data with dossier validated by ScoreRequest schema
         
     Returns:
         Scored lead dictionary
     """
     try:
-        # Get dossiê from lead
-        dossie = lead.get("dossie", {})
-        if not dossie:
-            raise HTTPException(status_code=400, detail="Lead must have a dossiê to be scored")
-        
         # Call the scorer agent
-        scored_lead = await score_lead(dossie, LITELLM_URL, DEEPSEEK_CHAT_API_KEY)
+        scored_lead = await score_lead(lead.dossier, LITELLM_URL, DEEPSEEK_CHAT_API_KEY)
         
         # Update metrics
         score_value = scored_lead.get("score", 0)
@@ -314,26 +339,25 @@ async def score_endpoint(lead: Dict[str, Any], _=Depends(verify_api_key), __=Dep
     except Exception as e:
         logger.error(f"Error in score endpoint: {e}")
         kirin_errors_total.labels(component="scorer").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Erro interno na pontuação")
 
 @app.post("/generate_message")
-async def generate_message_endpoint(lead: Dict[str, Any], _=Depends(verify_api_key), __=Depends(check_rate_limit)):
+async def generate_message_endpoint(lead: MessageRequest, _=Depends(verify_api_key), __=Depends(check_rate_limit)):
     """
     Generate a WhatsApp message for a lead using the Messenger agent.
     
     Args:
-        lead: Lead dictionary with score and dossiê
+        lead: Lead data with score and dossier validated by MessageRequest schema
         
     Returns:
         Generated message string or None if score < 20
     """
     try:
-        # Check if lead has score
-        if "score" not in lead:
-            raise HTTPException(status_code=400, detail="Lead must have a score to generate a message")
+        # Convert Pydantic model to dict for agent
+        lead_dict = lead.model_dump()
         
         # Call the messenger agent
-        message = await generate_message(lead, LITELLM_URL, DEEPSEEK_CHAT_API_KEY)
+        message = await generate_message(lead_dict, LITELLM_URL, DEEPSEEK_CHAT_API_KEY)
         
         # Update metrics if message was generated
         if message is not None:
@@ -345,40 +369,39 @@ async def generate_message_endpoint(lead: Dict[str, Any], _=Depends(verify_api_k
     except Exception as e:
         logger.error(f"Error in generate_message endpoint: {e}")
         kirin_errors_total.labels(component="messenger").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Erro interno na geração de mensagem")
 
 @app.post("/research")
-async def research_endpoint(lead: Dict[str, Any], _=Depends(verify_api_key), __=Depends(check_rate_limit)):
+async def research_endpoint(lead: ResearchRequest, _=Depends(verify_api_key), __=Depends(check_rate_limit)):
     """
     Research a lead using the Researcher agent.
     
     Args:
-        lead: Lead dictionary
+        lead: Lead data validated by ResearchRequest schema
         
     Returns:
         Researched lead dictionary
     """
     try:
-        # Only research leads with score >= 70
-        if lead.get("score", 0) < 70:
-            return lead  # Return lead unchanged if score too low
+        # Convert Pydantic model to dict for agent
+        lead_dict = lead.model_dump()
         
         # Call the researcher agent
-        researched_lead = await research_lead(lead, LITELLM_URL, MOONSHOT_V1_128K_API_KEY)
+        researched_lead = await research_lead(lead_dict, LITELLM_URL, MOONSHOT_V1_128K_API_KEY)
         
         return researched_lead
     except Exception as e:
         logger.error(f"Error in research endpoint: {e}")
         kirin_errors_total.labels(component="researcher").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Erro interno na pesquisa")
 
 @app.post("/crm_sync")
-async def crm_sync_endpoint(lead: Dict[str, Any], _=Depends(verify_api_key), __=Depends(check_rate_limit)):
+async def crm_sync_endpoint(lead: CRMSyncRequest, _=Depends(verify_api_key), __=Depends(check_rate_limit)):
     """
     Synchronize a lead with the CRM.
     
     Args:
-        lead: Lead dictionary
+        lead: Lead data validated by CRMSyncRequest schema
         
     Returns:
         Result of the CRM synchronization
@@ -387,14 +410,17 @@ async def crm_sync_endpoint(lead: Dict[str, Any], _=Depends(verify_api_key), __=
         if not crm_adapter:
             raise HTTPException(status_code=500, detail="CRM adapter not initialized")
         
+        # Convert Pydantic model to dict for adapter
+        lead_dict = lead.model_dump()
+        
         # Call the CRM adapter to upsert the lead
-        result = await crm_adapter.upsert_lead(lead)
+        result = await crm_adapter.upsert_lead(lead_dict)
         
         return result
     except Exception as e:
         logger.error(f"Error in crm_sync endpoint: {e}")
         kirin_errors_total.labels(component="crm_connector").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Erro interno na sincronização CRM")
 
 @app.get("/metrics")
 async def metrics_endpoint():
@@ -409,25 +435,21 @@ async def metrics_endpoint():
 
 
 @app.post("/discourse/ingest")
-async def discourse_ingest_endpoint(request: Dict[str, Any], _=Depends(verify_api_key), __=Depends(check_rate_limit)):
+async def discourse_ingest_endpoint(request: DiscourseRequest, _=Depends(verify_api_key), __=Depends(check_rate_limit)):
     """
     Ingest a raw discourse fragment.
     
     Args:
-        request: Dict with 'text' (required), 'source' (required), 'context' (optional)
+        request: Discourse data validated by DiscourseRequest schema
     
     Returns:
         Normalized DiscourseFragment dict
     """
     try:
-        text = request.get("text", "")
-        source = request.get("source", "other")
-        context = request.get("context", "")
-        
-        if not text:
-            raise HTTPException(status_code=400, detail="text is required")
-        
-        fragment = await ingest_discourse(text, source, context, LITELLM_URL, DEEPSEEK_CHAT_API_KEY)
+        fragment = await ingest_discourse(
+            request.text, request.source, request.context,
+            LITELLM_URL, DEEPSEEK_CHAT_API_KEY
+        )
         
         return fragment
     except ValueError as e:
@@ -439,26 +461,22 @@ async def discourse_ingest_endpoint(request: Dict[str, Any], _=Depends(verify_ap
 
 
 @app.post("/discourse/extract")
-async def discourse_extract_endpoint(request: Dict[str, Any], _=Depends(verify_api_key), __=Depends(check_rate_limit)):
+async def discourse_extract_endpoint(request: DiscourseRequest, _=Depends(verify_api_key), __=Depends(check_rate_limit)):
     """
     Full extraction pipeline: ingest + language game analysis.
     
     Args:
-        request: Dict with 'text' (required), 'source' (required), 'context' (optional)
+        request: Discourse data validated by DiscourseRequest schema
     
     Returns:
         Dict with 'fragment' and 'analysis' keys
     """
     try:
-        text = request.get("text", "")
-        source = request.get("source", "other")
-        context = request.get("context", "")
-        
-        if not text:
-            raise HTTPException(status_code=400, detail="text is required")
-        
         # Layer 1: Ingest
-        fragment = await ingest_discourse(text, source, context, LITELLM_URL, DEEPSEEK_CHAT_API_KEY)
+        fragment = await ingest_discourse(
+            request.text, request.source, request.context,
+            LITELLM_URL, DEEPSEEK_CHAT_API_KEY
+        )
         
         # Layer 2: Language Game Analysis
         analysis = await analyze_language_game(fragment, LITELLM_URL, DEEPSEEK_CHAT_API_KEY)
@@ -472,118 +490,101 @@ async def discourse_extract_endpoint(request: Dict[str, Any], _=Depends(verify_a
     except Exception as e:
         logger.error(f"Error in discourse extract endpoint: {e}")
         kirin_errors_total.labels(component="discourse_pipeline").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Erro interno na extração de discurso")
 
 
 @app.post("/resonance/analyze")
-async def resonance_analyze_endpoint(request: Dict[str, Any], _=Depends(verify_api_key), __=Depends(check_rate_limit)):
+async def resonance_analyze_endpoint(request: ResonanceAnalyzeRequest, _=Depends(verify_api_key), __=Depends(check_rate_limit)):
     """
     Analyze resonance patterns across multiple language game analyses.
     
     Args:
-        request: Dict with 'analyses' (list of analysis dicts), 'market_cluster' (optional)
+        request: Resonance data validated by ResonanceAnalyzeRequest schema
     
     Returns:
         ResonanceCluster dict
     """
     try:
-        analyses = request.get("analyses", [])
-        market_cluster = request.get("market_cluster", "")
-        
-        if not analyses:
-            raise HTTPException(status_code=400, detail="analyses list is required")
-        
-        cluster = await analyze_resonance(analyses, market_cluster, LITELLM_URL, DEEPSEEK_CHAT_API_KEY)
+        cluster = await analyze_resonance(
+            request.analyses, request.market_cluster,
+            LITELLM_URL, DEEPSEEK_CHAT_API_KEY
+        )
         
         return cluster
     except Exception as e:
         logger.error(f"Error in resonance analyze endpoint: {e}")
         kirin_errors_total.labels(component="resonance").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Erro interno na análise de ressonância")
 
 
 @app.post("/resonance/lookup")
-async def resonance_lookup_endpoint(request: Dict[str, Any], _=Depends(verify_api_key), __=Depends(check_rate_limit)):
+async def resonance_lookup_endpoint(request: ResonanceLookupRequest, _=Depends(verify_api_key), __=Depends(check_rate_limit)):
     """
     Search for similar resonance patterns.
     
     Args:
-        request: Dict with 'query' (required), 'limit' (optional, default 5)
+        request: Resonance data validated by ResonanceLookupRequest schema
     
     Returns:
         List of matching ResonanceCluster dicts
     """
     try:
-        query = request.get("query", "")
-        limit = request.get("limit", 5)
-        
-        if not query:
-            raise HTTPException(status_code=400, detail="query is required")
-        
-        results = await lookup_resonance(query, LITELLM_URL, DEEPSEEK_CHAT_API_KEY, limit)
+        results = await lookup_resonance(
+            request.query, LITELLM_URL, DEEPSEEK_CHAT_API_KEY, request.limit
+        )
         
         return {"results": results, "count": len(results)}
     except Exception as e:
         logger.error(f"Error in resonance lookup endpoint: {e}")
         kirin_errors_total.labels(component="resonance").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Erro interno na busca de ressonância")
 
 
 @app.post("/prospects/generate")
-async def prospect_generate_endpoint(request: Dict[str, Any], _=Depends(verify_api_key), __=Depends(check_rate_limit)):
+async def prospect_generate_endpoint(request: ResonanceProspectRequest, _=Depends(verify_api_key), __=Depends(check_rate_limit)):
     """
     Generate a prospect profile from language game analysis.
     
     Args:
-        request: Dict with 'analysis' (required), 'resonance' (optional)
+        request: Prospect data validated by ResonanceProspectRequest schema
     
     Returns:
         ProspectProfile dict
     """
     try:
-        analysis = request.get("analysis", {})
-        resonance = request.get("resonance", None)
-        
-        if not analysis:
-            raise HTTPException(status_code=400, detail="analysis is required")
-        
-        prospect = await generate_prospect(analysis, resonance, LITELLM_URL, DEEPSEEK_CHAT_API_KEY)
+        prospect = await generate_prospect(
+            request.target_profile, None,
+            LITELLM_URL, DEEPSEEK_CHAT_API_KEY
+        )
         
         return prospect
     except Exception as e:
         logger.error(f"Error in prospect generate endpoint: {e}")
         kirin_errors_total.labels(component="prospect_generator").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Erro interno na geração de prospect")
 
 
 @app.post("/resonance/signal")
-async def resonance_signal_endpoint(request: Dict[str, Any], _=Depends(verify_api_key), __=Depends(check_rate_limit)):
+async def resonance_signal_endpoint(request: ResonanceRecordRequest, _=Depends(verify_api_key), __=Depends(check_rate_limit)):
     """
     Record a market response signal for a resonance cluster.
     
     Args:
-        request: Dict with 'cluster_id' (required), 'signal_type' (required), 
-                 'strength' (required, 0.0-1.0), 'metadata' (optional)
+        request: Signal data validated by ResonanceRecordRequest schema
     
     Returns:
         Recorded signal dict
     """
     try:
-        cluster_id = request.get("cluster_id", "")
-        signal_type = request.get("signal_type", "")
-        strength = request.get("strength", 0.0)
-        metadata = request.get("metadata", {})
-        
-        if not cluster_id or not signal_type:
-            raise HTTPException(status_code=400, detail="cluster_id and signal_type are required")
-        
-        signal = await record_signal(cluster_id, signal_type, strength, metadata)
+        signal = await record_signal(
+            request.lead_id, request.source, 1.0, {"text": request.text}
+        )
         
         return signal
     except Exception as e:
         logger.error(f"Error in resonance signal endpoint: {e}")
         kirin_errors_total.labels(component="resonance").inc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Erro interno no registro de sinal")
 
 
 if __name__ == "__main__":
