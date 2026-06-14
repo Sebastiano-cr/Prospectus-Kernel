@@ -71,7 +71,7 @@ def bad_enricher_data():
                 "resumo_perfil": "Bar",
                 "pontos_fracos": ["sem Instagram", "não tem site"],
                 "oportunidades": ["melhorar", "crescer"],
-                "maturidade_digital": 9,  # SUSPEITO: alta maturidade sem presença digital
+                "maturidade_digital": "alto",  # SUSPEITO: alta maturidade sem presença digital
                 "resumo_executivo": "Bar bom"
             }
         },

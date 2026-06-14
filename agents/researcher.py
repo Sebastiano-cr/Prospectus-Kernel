@@ -4,12 +4,14 @@ Uses Moonshot Kimi K2 via ILLMClient port to research leads and find sources.
 """
 import asyncio
 import json
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 import os
 import logging
 from . import runtime
 from .factory import ServiceFactory
 from .ports.llm_client import LLMMessage, LLMError
+from src.locale import get_locale, LocalePort
+from agents.skeptic import check_agent_output
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +22,15 @@ RETRY_DELAY = 5.0
 KIMI_MAX_PARALLEL = int(os.getenv("KIMI_MAX_PARALLEL", "3"))
 
 
-async def research_lead(lead: Dict[str, Any], litellm_url: str = None, api_key: str = None) -> Dict[str, Any]:
-    """
-    Research lead using Moonshot Kimi K2 via ILLMClient port.
-    """
+async def research_lead(
+    lead: Dict[str, Any],
+    litellm_url: str = None,
+    api_key: str = None,
+    locale: Optional[LocalePort] = None,
+) -> Dict[str, Any]:
     llm = ServiceFactory.get_llm_client()
-    prompt = _build_research_prompt(lead)
+    locale = locale or get_locale("pt-BR")
+    prompt = _build_research_prompt(lead, locale)
     messages = [LLMMessage(role="user", content=prompt)]
 
     for attempt in range(MAX_RETRIES + 1):
@@ -41,10 +46,7 @@ async def research_lead(lead: Dict[str, Any], litellm_url: str = None, api_key: 
             try:
                 research_data = json.loads(response.content)
             except json.JSONDecodeError:
-                research_data = {
-                    "fontes_consultadas": [],
-                    "error": "parse_failed"
-                }
+                research_data = {"fontes_consultadas": [], "error": "parse_failed"}
 
             if "fontes_consultadas" not in research_data:
                 research_data["fontes_consultadas"] = []
@@ -55,8 +57,14 @@ async def research_lead(lead: Dict[str, Any], litellm_url: str = None, api_key: 
             researched_lead = lead.copy()
             researched_lead.update({
                 "pesquisa": research_data,
-                "status": "pesquisado"
+                "status": locale.get_status_label("researched"),
             })
+
+            report = check_agent_output("researcher", research_data, {
+                "lead": lead,
+            }, locale)
+            if not report.passed:
+                researched_lead["skeptic_report"] = report.to_dict()
 
             await _store_research_in_memory(lead, research_data)
 
@@ -66,98 +74,70 @@ async def research_lead(lead: Dict[str, Any], litellm_url: str = None, api_key: 
             if attempt < MAX_RETRIES:
                 await asyncio.sleep(RETRY_DELAY)
                 continue
-            return _mark_research_failed(lead, f"LLM error: {str(e)}")
+            return _mark_research_failed(lead, f"LLM error: {str(e)}", locale)
         except Exception as e:
             if attempt < MAX_RETRIES:
                 await asyncio.sleep(RETRY_DELAY)
                 continue
-            return _mark_research_failed(lead, f"Research error: {str(e)}")
+            return _mark_research_failed(lead, f"Research error: {str(e)}", locale)
 
-    return _mark_research_failed(lead, "Unknown research error")
+    return _mark_research_failed(lead, "Unknown research error", locale)
 
 
-def _build_research_prompt(lead: Dict[str, Any]) -> str:
-    """
-    Build prompt for the research model.
-    """
-    name = lead.get("name", "Estabelecimento desconhecido")
-    address = lead.get("address", "Endereço não informado")
+def _build_research_prompt(lead: Dict[str, Any], locale: Optional[LocalePort] = None) -> str:
+    locale = locale or get_locale("pt-BR")
+    name = lead.get("name", locale.get_fallback("unknown_establishment"))
+    address = lead.get("address", locale.get_fallback("address_not_provided"))
     dossie = lead.get("dossie", {})
-    resumo_perfil = dossie.get("resumo_perfil", "Perfil não disponível")
-    pontos_fracos = dossie.get("pontos_fracos", [])
-    oportunidades = dossie.get("oportunidades", [])
+    profile_summary = dossie.get("resumo_perfil", locale.get_fallback("profile_not_available"))
+    weaknesses = dossie.get("pontos_fracos", [])
+    opportunities = dossie.get("oportunidades", [])
+    field_sources = locale.get_field_name("sources_consulted")
 
-    prompt = f"""
-    Você é um pesquisador especializado em inteligência de mercado para negócios locais.
-    Pesquise informações adicionais sobre o seguinte estabelecimento para complementar o dossiê existente:
+    weaknesses_str = ", ".join(weaknesses) if weaknesses else locale.get_fallback("no_weaknesses")
+    opportunities_str = ", ".join(opportunities) if opportunities else locale.get_fallback("no_opportunities")
 
-    ESTABELECIMENTO:
-    - Nome: {name}
-    - Endereço: {address}
-
-    DOSSiÊ EXISTENTE:
-    - Resumo do perfil: {resumo_perfil}
-    - Pontos fracos: {', '.join(pontos_fracos) if pontos_fracos else 'Nenhum identificado'}
-    - Oportunidades: {', '.join(oportunidades) if oportunidades else 'Nenhuma identificada'}
-
-    Sua tarefa é encontrar fontes externas confiáveis que possam validar ou complementar estas informações.
-    Pesquise por:
-    - Notícias recentes sobre o estabelecimento
-    - Menções em blogs ou sites especializados
-    - Informações sobre os proprietários ou gestores
-    - Dados sobre desempenho financeiro ou de mercado (se disponível)
-    - Avaliações em sites especializados além do Google Maps
-
-    Retorne seus resultados em formato JSON com o seguinte campo obrigatório:
-    - fontes_consultadas: Lista de fontes consultadas (pode estar vazia se nada for encontrado)
-      Cada fonte deve ser um objeto com:
-      - tipo: Tipo da fonte (ex: "noticia", "blog", "rede_social", "site_especializado")
-      - titulo: Título ou descrição da fonte
-      - url: URL da fonte (se disponível)
-      - relevancia: Breve descrição da relevância da fonte para o estabelecimento
-      - data_consulta: Data da consulta no formato ISO (YYYY-MM-DD)
-
-    Se não conseguir encontrar fontes ou ocorrer erro no parsing, retorne:
-    {{"fontes_consultadas": [], "error": "parse_failed"}}
-
-    Responda APENAS com o JSON válido, sem texto adicional.
-    """
-
-    return prompt.strip()
+    return locale.get_prompt("researcher",
+        name=name,
+        address=address,
+        profile_summary=profile_summary,
+        weaknesses_str=weaknesses_str,
+        opportunities_str=opportunities_str,
+        field_sources=field_sources,
+        json_only_suffix=locale.get_json_only_suffix(),
+    )
 
 
-def _mark_research_failed(lead: Dict[str, Any], error_reason: str) -> Dict[str, Any]:
-    """
-    Mark lead as research failed.
-    """
+def _mark_research_failed(
+    lead: Dict[str, Any],
+    error_reason: str,
+    locale: Optional[LocalePort] = None,
+) -> Dict[str, Any]:
+    locale = locale or get_locale("pt-BR")
     failed_lead = lead.copy()
     failed_lead.update({
         "pesquisa": {
             "fontes_consultadas": [],
-            "error": error_reason
+            "error": error_reason,
         },
-        "status": "pesquisado",
+        "status": locale.get_status_label("researched"),
         "research_failed": True,
-        "research_error": error_reason
+        "research_error": error_reason,
     })
 
     return failed_lead
 
 
 async def _store_research_in_memory(lead: Dict[str, Any], research_data: Dict[str, Any]) -> None:
-    """
-    Store research result in memory managers if available.
-    """
     try:
         lead_id = lead.get("id") or lead.get("google_maps_id")
         if not lead_id:
             logger.debug("No lead identifier found, skipping memory storage for research")
             return
 
-        postgres_mem = runtime.get_postgres_memory()
-
-        if postgres_mem:
-            await postgres_mem.store_lead_memory(lead_id, "pesquisa", research_data)
+        store = runtime.get_store()
+        if store:
+            await store.store_lead_memory(lead_id, "pesquisa", research_data)
 
     except Exception as e:
         logger.warning(f"Failed to store research in memory for lead {lead.get('id')}: {e}")

@@ -11,7 +11,6 @@ from agents.pure_functions import (
     truncate_message,
     is_valid_status,
     can_send_message_sync,
-    build_mcp_error,
     VALID_STATUSES,
     BLOCKED_STATUSES
 )
@@ -252,27 +251,7 @@ def test_kimi_k2_report_structure(data):
     assert research_data_error["error"] == "parse_failed"
 
 # Property 19: Formato de erro estruturado do MCP_Server
-@given(
-    st.text(min_size=1),
-    st.text(min_size=1),
-    st.one_of(st.none(), st.integers(min_value=0, max_value=600))
-)
-@settings(max_examples=100)
-def test_build_mcp_error_structure(error_code, error_message, retry_after):
-    """Property 19: Formato de erro estruturado do MCP_Server"""
-    result = build_mcp_error(error_code, error_message, retry_after)
-    assert isinstance(result, dict)
-    assert "error_code" in result
-    assert "error_message" in result
-    assert result["error_code"] == error_code
-    assert result["error_message"] == error_message
-    if retry_after is not None:
-        assert "retry_after" in result
-        assert result["retry_after"] == retry_after
-    else:
-        assert "retry_after" not in result
-
-# Property 20: Bloqueio de mensagens para leads vendidos ou repassados
+# Property 19: Bloqueio de mensagens para leads vendidos ou repassados
 @given(st.sampled_from(list(BLOCKED_STATUSES)))
 @settings(max_examples=100)
 def test_can_send_message_sync_blocked(status):

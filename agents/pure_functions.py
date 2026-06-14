@@ -142,24 +142,3 @@ def truncate_dossie_for_scoring(dossie: dict, max_resumo: int = 300) -> dict:
         "oportunidades": dossie.get("oportunidades", [])[:2],
         "maturidade_digital": dossie.get("maturidade_digital", "médio"),
     }
-
-
-def build_mcp_error(error_code: str, error_message: str, retry_after: int = None) -> dict:
-    """
-    Build structured error object for MCP server.
-    
-    Args:
-        error_code: Error code string
-        error_message: Human-readable error message
-        retry_after: Seconds to wait before retrying (optional)
-        
-    Returns:
-        Structured error dictionary
-    """
-    error = {
-        "error_code": error_code,
-        "error_message": error_message
-    }
-    if retry_after is not None:
-        error["retry_after"] = retry_after
-    return error

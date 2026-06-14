@@ -1,125 +1,80 @@
 """
 Global runtime state for the Kirin cognitive runtime.
-Holds initialized memory managers and other shared resources.
+Uses ChromaStore as the single unified storage backend.
 """
+import asyncio
 import logging
 from typing import Optional
-from agents.memory.postgres_memory import PostgresMemoryManager
-from agents.memory.qdrant_memory import QdrantMemoryManager
-from agents.memory.redis_memory import RedisMemoryManager
+from src.store import ChromaStore
 
 logger = logging.getLogger(__name__)
 
-# Global instances of memory managers
-_postgres_memory: Optional[PostgresMemoryManager] = None
-_qdrant_memory: Optional[QdrantMemoryManager] = None
-_redis_memory: Optional[RedisMemoryManager] = None
-_embedding_router = None  # lazy import, defined in initialize
+_store: Optional[ChromaStore] = None
 _initialized: bool = False
+_MAX_INIT_RETRIES = 5
+_INIT_RETRY_DELAY = 3.0
+
 
 async def initialize_memory_managers(config: dict) -> None:
-    """
-    Asynchronously initialize all memory managers based on the provided configuration.
-
-    Args:
-        config: Dictionary with keys 'postgres', 'qdrant', 'redis' each containing connection parameters.
-                Optional key 'embedding_router' with 'enabled' bool to activate EmbeddingRouter.
-    """
-    global _postgres_memory, _qdrant_memory, _redis_memory, _embedding_router, _initialized
+    global _store, _initialized
 
     if _initialized:
-        logger.warning("Memory managers already initialized. Skipping re-initialization.")
+        logger.warning("Memory already initialized. Skipping.")
         return
 
-    try:
-        # Inicializa EmbeddingRouter se configurado
-        router = None
-        if config.get("embedding_router", {}).get("enabled", False):
-            try:
-                from agents.memory.embedding_router import create_default_router
-                router = create_default_router()
-                logger.info(f"EmbeddingRouter initialized. Active: {router.active_name}, "
-                           f"Strategies: {list(router.list_strategies().keys())}")
-            except Exception as e:
-                logger.warning(f"Failed to initialize EmbeddingRouter: {e}")
-        _embedding_router = router
+    path = config.get("chroma", {}).get("path", "./data/chroma")
 
-        if "postgres" in config:
-            postgres_config = config["postgres"]
-            _postgres_memory = PostgresMemoryManager(
-                host=postgres_config.get("host", "localhost"),
-                port=postgres_config.get("port", 5432),
-                database=postgres_config.get("database", "kirin"),
-                user=postgres_config.get("user", "kirin"),
-                password=postgres_config.get("password", "")
-            )
-            await _postgres_memory.initialize()
+    for attempt in range(_MAX_INIT_RETRIES):
+        try:
+            _store = ChromaStore(path=path)
+            await _store.initialize()
+            _initialized = True
+            logger.info("ChromaStore initialized (replaces PostgreSQL + Qdrant + Redis)")
+            return
+        except Exception as e:
+            logger.warning(f"ChromaStore init attempt {attempt + 1} failed: {e}")
+            _store = None
+            _initialized = False
+            if attempt < _MAX_INIT_RETRIES - 1:
+                await asyncio.sleep(_INIT_RETRY_DELAY)
 
-        if "qdrant" in config:
-            qdrant_config = config["qdrant"]
-            _qdrant_memory = QdrantMemoryManager(
-                host=qdrant_config.get("host", "localhost"),
-                port=qdrant_config.get("port", 6333),
-                embedding_router=router
-            )
-            await _qdrant_memory.initialize()
+    logger.error("All ChromaStore init attempts failed")
+    raise RuntimeError("Failed to initialize ChromaStore after multiple retries")
 
-        if "redis" in config:
-            redis_config = config["redis"]
-            _redis_memory = RedisMemoryManager(
-                host=redis_config.get("host", "localhost"),
-                port=redis_config.get("port", 6379),
-                password=redis_config.get("password"),
-                db=redis_config.get("db", 0)
-            )
-            await _redis_memory.initialize()
-
-        _initialized = True
-        logger.info("Memory managers initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize memory managers: {e}")
-        _initialized = False
-        await shutdown_memory_managers_async()
-        raise
 
 async def shutdown_memory_managers_async() -> None:
-    """
-    Asynchronously shutdown all memory manager instances.
-    """
-    global _postgres_memory, _qdrant_memory, _redis_memory, _embedding_router, _initialized
+    global _store, _initialized
 
-    if not _initialized:
-        return
+    if _initialized and _store:
+        await _store.shutdown()
 
-    try:
-        if _postgres_memory:
-            await _postgres_memory.shutdown()
-        if _qdrant_memory:
-            await _qdrant_memory.shutdown()
-        if _redis_memory:
-            await _redis_memory.shutdown()
-    except Exception as e:
-        logger.error(f"Error shutting down memory managers: {e}")
-    finally:
-        _postgres_memory = None
-        _qdrant_memory = None
-        _redis_memory = None
-        _embedding_router = None
-        _initialized = False
-        logger.info("Memory managers shut down")
+    _store = None
+    _initialized = False
+    logger.info("ChromaStore shut down")
 
-def get_postgres_memory() -> Optional[PostgresMemoryManager]:
-    return _postgres_memory
 
-def get_qdrant_memory() -> Optional[QdrantMemoryManager]:
-    return _qdrant_memory
+def get_store() -> Optional[ChromaStore]:
+    return _store
 
-def get_redis_memory() -> Optional[RedisMemoryManager]:
-    return _redis_memory
+
+def get_postgres_memory() -> Optional[ChromaStore]:
+    """Returns ChromaStore (replaces PostgresMemoryManager)."""
+    return _store
+
+
+def get_qdrant_memory() -> Optional[ChromaStore]:
+    """Returns ChromaStore (replaces QdrantMemoryManager)."""
+    return _store
+
+
+def get_redis_memory() -> Optional[ChromaStore]:
+    """Returns ChromaStore (replaces RedisMemoryManager)."""
+    return _store
+
 
 def get_embedding_router():
-    """Get the EmbeddingRouter instance, if initialized."""
-    return _embedding_router
+    return None
+
 
 def is_initialized() -> bool:
     return _initialized

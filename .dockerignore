@@ -1,0 +1,17 @@
+.env
+.git/
+.github/
+.hypothesis/
+.opencode/
+.pytest_cache/
+.vscode/
+tests/
+eval/
+backups/
+__pycache__/
+*.pyc
+*.pyo
+*.md
+docker-compose.yml
+pyproject.toml
+run_agents.sh

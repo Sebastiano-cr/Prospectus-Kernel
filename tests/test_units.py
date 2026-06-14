@@ -9,8 +9,7 @@ from agents.pure_functions import (
     compute_instagram_inativo,
     truncate_message,
     is_valid_status,
-    can_send_message_sync,
-    build_mcp_error
+    can_send_message_sync
 )
 from agents.enricher import _validate_and_structure_dossie, _mark_enrichment_failed
 from agents.scorer import _validate_and_structure_score, _scoring_fallback
@@ -61,28 +60,6 @@ def test_messenger_score_below_20_discards():
     # For now, we verify the logic
     assert lead["score"] < 20
     # In real implementation, this would return None and set status to "descartado"
-
-
-def test_mcp_error_structure():
-    """Test structured error format from MCP server (Property 19)"""
-    error = build_mcp_error(
-        error_code="TEST_ERROR",
-        error_message="Test error message",
-        retry_after=30
-    )
-    
-    assert isinstance(error, dict)
-    assert error["error_code"] == "TEST_ERROR"
-    assert error["error_message"] == "Test error message"
-    assert error["retry_after"] == 30
-    
-    # Test without retry_after
-    error_no_retry = build_mcp_error(
-        error_code="TEST_ERROR",
-        error_message="Test error message"
-    )
-    
-    assert "retry_after" not in error_no_retry
 
 
 def test_crm_deduplication():

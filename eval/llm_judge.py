@@ -13,7 +13,7 @@ import json
 import logging
 import os
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Dict, Optional
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)

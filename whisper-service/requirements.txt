@@ -1,9 +1,0 @@
-# Core dependencies
-fastapi>=0.100.0
-uvicorn>=0.23.0
-python-multipart>=0.0.6
-# For HTTP requests (if calling external services)
-httpx>=0.24.0
-# For healthcheck and environment variables
-requests>=2.25.0
-python-dotenv>=1.0.0

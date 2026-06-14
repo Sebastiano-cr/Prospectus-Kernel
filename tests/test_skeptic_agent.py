@@ -172,20 +172,20 @@ class TestH5SuspiciousLength:
 
 class TestH6MaturityIncoherence:
     def test_high_maturity_no_social_flags(self, skeptic):
-        output = {"dossie": {"maturidade_digital": 9, "pontos_fracos": ["sem Instagram"]}}
+        output = {"dossie": {"maturidade_digital": "alto", "pontos_fracos": ["sem Instagram"]}}
         context = {"has_social_media": False}
         result = skeptic._check_maturity_incoherence("enricher", output, context)
         assert result is not None
         assert "incoerente" in result.lower() or "ausência" in result.lower()
 
     def test_low_maturity_no_flag(self, skeptic):
-        output = {"dossie": {"maturidade_digital": 3, "pontos_fracos": ["sem Instagram"]}}
+        output = {"dossie": {"maturidade_digital": "baixo", "pontos_fracos": ["sem Instagram"]}}
         context = {"has_social_media": False}
         result = skeptic._check_maturity_incoherence("enricher", output, context)
         assert result is None
 
     def test_high_maturity_with_social_no_flag(self, skeptic):
-        output = {"dossie": {"maturidade_digital": 8, "pontos_fracos": []}}
+        output = {"dossie": {"maturidade_digital": "alto", "pontos_fracos": []}}
         context = {"has_social_media": True}
         result = skeptic._check_maturity_incoherence("enricher", output, context)
         assert result is None

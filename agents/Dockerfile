@@ -1,8 +1,12 @@
 FROM python:3.11-slim
 WORKDIR /app
-COPY . /app/agents/
-RUN pip install --no-cache-dir -r /app/agents/requirements.txt
+
+COPY agents/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY agents/ ./agents/
+COPY src/ ./src/
+
 EXPOSE 8000
 ENV PYTHONPATH=/app
-WORKDIR /app/agents
-CMD ["python", "server.py"]
+CMD ["python", "agents/server.py"]

@@ -19,7 +19,7 @@ jobs:
           pip install ruff
       - name: Lint with ruff
         run: |
-          ruff check agents/ eval/ kirin-core/core/
+          ruff check agents/ eval/ src/
 
   test:
     runs-on: ubuntu-latest
@@ -31,12 +31,12 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r agents/requirements-dev.txt
-      - name: Run unit tests
+      - name: Pre-download ChromaDB ONNX model
         run: |
-          python -m pytest tests/test_policy_engine.py tests/test_skeptic_agent.py -v --tb=short
-      - name: Run existing unit tests
+          python3 -c "import chromadb.utils.embedding_functions as ef; ef.ONNXMiniLM_L6_V2()"
+      - name: Run tests
         run: |
-          python -m pytest tests/test_units.py -v --tb=short
+          python -m pytest tests/ -q --tb=short
 
   typecheck:
     runs-on: ubuntu-latest
@@ -51,4 +51,4 @@ jobs:
           pip install -r agents/requirements.txt
       - name: Type check
         run: |
-          mypy agents/skeptic.py agents/score.py --ignore-missing-imports || true
+          mypy agents/skeptic.py agents/scorer.py --ignore-missing-imports || true

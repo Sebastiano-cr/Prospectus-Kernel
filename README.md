@@ -1,296 +1,314 @@
 # Kirin Platform
 
-A cognitive runtime platform for lead enrichment, scoring, messaging, and research with persistent memory capabilities.
+Cognitive runtime platform para prospecção B2B com análise wittgensteiniana de discurso.
 
 ## Overview
 
-The Kirin platform is designed to process leads through a pipeline of specialized agents:
-1. **Enricher**: Gathers additional information about leads from various sources
-2. **Scorer**: Assigns a score to leads based on their enriched data
-3. **Messenger**: Generates and sends personalized WhatsApp messages
-4. **Researcher**: Conducts deep research on high-value leads
+Dois pipelines principais:
 
-What makes Kirin unique is its cognitive runtime layer that provides persistent memory capabilities using:
-- **PostgreSQL**: For structured lead memory and interaction history
-- **Qdrant**: For vector storage and similarity search
-- **Redis**: For short-term context and caching with TTL
+**Pipeline 1 — Prospecção B2B:**
+1. **Enricher** — Gera dossiê do lead via Qwen VL Max (nome, pontos fracos, maturidade digital)
+2. **Scorer** — Pontua 0-100 via DeepSeek, classifica em frio/morno/quente
+3. **Messenger** — Gera e envia mensagem WhatsApp personalizada via Evolution API ou OpenWA
+4. **Researcher** — Pesquisa fontes externas via Moonshot Kimi K2 (score ≥ 70)
+5. **CRM Sync** — Sincroniza com Notion, Airtable ou NocoDB
 
-## Architecture
+**Pipeline 2 — Inteligência de Discurso (Language Games):**
+1. **Ingestão** — Normaliza discurso bruto em DiscourseFragment (emotion, topic, context)
+2. **Language Game** — Análise wittgensteiniana: 14 campos (belief, fear, desire, objection, identity, tension...)
+3. **Resonance** — Clusterização de padrões entre fragmentos (high/low resonance, hooks)
+4. **Prospect** — Geração de perfil de prospect com narrativa e ângulo de abordagem
+
+Armazenamento único: **ChromaDB** (persistência vetorial + cache LRU em memória + dedup).
+
+## Arquitetura
 
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│   Lead Input    │───▶│   Enricher Agent │───▶│    Scorer Agent  │
-└─────────────────┘    └──────────────────┘    └──────────────────┘
-                                     │                       │
-                                     ▼                       ▼
-                           ┌──────────────────┐    ┌──────────────────┐
-                           │ Messenger Agent  │───▶│ Researcher Agent │
-                           └──────────────────┘    └──────────────────┘
-                                     │                       │
-                                     ▼                       ▼
-                           ┌──────────────────┐    ┌──────────────────┐
-                           │   WhatsApp       │    │   Deep Research  │
-                           │   Message Sent   │    │     Results      │
-                           └──────────────────┘    └──────────────────┘
-                                     │                       │
-                                     ▼                       ▼
-                           ┌──────────────────┐    ┌──────────────────┐
-                           │   PostgreSQL     │    │      Qdrant      │
-                           │ (Lead Memory)    │    │ (Vector Store)   │
-                           └──────────────────┘    └──────────────────┘
-                                                    │
-                                                    ▼
-                                           ┌──────────────────┐
-                                           │     Redis        │
-                                           │ (Short-term Context)│
-                                           └──────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                    Pipeline 1 — Prospecção               │
+│  ┌──────────┐   ┌────────┐   ┌───────────┐   ┌────────┐│
+│  │ Enricher │──▶│ Scorer │──▶│ Messenger │──▶│Research││
+│  │ Qwen VL  │   │DeepSeek│   │ DeepSeek  │   │  Kimi  ││
+│  └──────────┘   └────────┘   └─────┬─────┘   │  128k  ││
+│                                    │         └────────┘│
+│                                    ▼                    │
+│                           ┌──────────────┐              │
+│                           │   WhatsApp   │              │
+│                           │   Evolution  │              │
+│                           │   / OpenWA   │              │
+│                           └──────────────┘              │
+├─────────────────────────────────────────────────────────┤
+│              Pipeline 2 — Discourse Intelligence         │
+│  ┌──────────┐   ┌──────────────┐   ┌──────────┐        │
+│  │ Ingest   │──▶│ Language     │──▶│Resonance │        │
+│  │ LLM      │   │ Game (LLM)   │   │ Engine   │        │
+│  └──────────┘   └──────────────┘   └────┬─────┘        │
+│                                         ▼               │
+│                                ┌──────────────────┐     │
+│                                │  Prospect Profile│     │
+│                                │ + Narrative      │     │
+│                                └──────────────────┘     │
+├─────────────────────────────────────────────────────────┤
+│                    Storage Layer                         │
+│  ┌──────────────────────────────────────────────┐       │
+│  │              ChromaStore                      │       │
+│  │  • Persistência vetorial (ChromaDB)          │       │
+│  │  • Cache LRU em memória (TTL configurável)   │       │
+│  │  • Dedup via hash                            │       │
+│  └──────────────────────────────────────────────┘       │
+└─────────────────────────────────────────────────────────┘
 ```
 
-## Components
+## Componentes
 
-### Memory Managers
+### Agentes (Pipeline 1)
 
-1. **PostgreSQL Memory Manager**
-   - Stores structured lead memory (profiles, preferences)
-   - Maintains interaction history (append-only)
-   - Provides relational querying capabilities
+| Agente | Modelo | Função |
+|---|---|---|
+| **Enricher** | Qwen VL Max | Gera dossiê: resumo_perfil, pontos_fracos, oportunidades, maturidade_digital |
+| **Scorer** | DeepSeek Chat | Score 0-100 + faixa (frio ≤39, morno 40-69, quente ≥70) |
+| **Messenger** | DeepSeek Chat | Mensagem WhatsApp personalizada (≤300 chars) + templates fallback |
+| **Researcher** | Moonshot Kimi K2 128k | Pesquisa fontes externas (notícias, blogs, redes sociais) |
 
-2. **Qdrant Memory Manager**
-   - Stores vector embeddings for similarity search
-   - Enables finding similar leads based on characteristics
-   - Used for lead enrichment and recommendation
+### Discourse Intelligence (Pipeline 2)
 
-3. **Redis Memory Manager**
-   - Stores short-term conversation context with TTL
-   - Implements rate limiting counters
-   - Provides caching for frequently accessed data
+| Camada | Função | Saída |
+|---|---|---|
+| **Ingestion** | Normaliza discurso bruto | `DiscourseFragment` (text, source, emotion, topic) |
+| **Language Game** | Análise wittgensteiniana | `LanguageGameAnalysis` (14 campos: belief, fear, desire, objection, tension...) |
+| **Resonance** | Clusterização de padrões | `ResonanceCluster` (high/low patterns, hooks, belief_density) |
+| **Prospect** | Perfil de prospect | `ProspectProfile` (belief, identity, narrative, outreach_angle, confidence) |
 
-### Agents
+### SkepticAgent
 
-1. **Enricher Agent**
-   - Uses Google Maps API to gather business information
-   - Uses Instagram API to analyze social media presence
-   - Creates a comprehensive dossiê for each lead
-   - Stores enrichment results in PostgreSQL memory
+Mecanismo de abdução que avalia outputs dos LLMs com 7 heurísticas (H1-H7):
+- H1: Score vs dossier mismatch
+- H2: Generic message detection
+- H3: Fake source URLs
+- H4: Language deviation (PT-BR vs EN)
+- H5: Suspicious length
+- H6: Maturity incoherence
+- H7: Emotion inconsistency
 
-2. **Scorer Agent**
-   - Uses LLM to analyze the dossiê and assign a score (0-100)
-   - Classifies leads into "frio" (cold), "morno" (warm), or "quente" (hot)
-   - Stores scoring results in PostgreSQL memory
+### ChromaStore
 
-3. **Messenger Agent**
-   - Generates personalized WhatsApp messages based on lead data
-   - Respects daily message limits and rate constraints
-   - Tracks message delivery and opt-out responses
-   - Stores sent messages in PostgreSQL and context in Redis
+Substitui PostgreSQL + Qdrant + Redis por um banco único:
 
-4. **Researcher Agent**
-   - Conducts deep research on leads with score >= 70
-   - Uses multiple sources to gather competitive intelligence
-   - Stores research results in PostgreSQL and Qdrant
+```python
+from src.store import ChromaStore
 
-### API Endpoints
+store = ChromaStore(path="./data/chroma")
+await store.initialize()
 
-- `POST /enrich` - Enrich a lead
-- `POST /score` - Score a lead (requires dossiê)
-- `POST /generate_message` - Generate WhatsApp message
-- `POST /research` - Research a lead (score >= 70)
-- `POST /crm_sync` - Synchronize lead with CRM
-- `GET /memory/health` - Check memory manager status
-- `GET /health` - General health check
-- `GET /metrics` - Prometheus metrics
+# Persistência
+await store.store_lead_memory("lead_123", "dossie", dossie)
 
-## Setup and Installation
+# Busca vetorial
+results = await store.search_text("kirin_discourse", "crenças sobre preço", limit=5)
 
-### Prerequisites
+# Cache LRU com TTL
+await store.cache_set("daily_count:2026-06-13", 42, ttl_seconds=86400)
+count = await store.cache_get("daily_count:2026-06-13")
 
-- Docker and Docker Compose
-- Python 3.13+
-- API keys for:
-  - Google Maps Platform
-  - Instagram Graph API
-  - LiteLLM (for LLM access)
-  - WhatsApp Evolution API
-  - CRM provider (Notion, Airtable, or NocoDB)
+# Dedup
+if not await store.check_duplicate(hash_key):
+    await store.store_dedup(hash_key, data)
+```
 
-### Environment Variables
+### LocalePort (i18n)
 
-Create a `.env` file in the root directory with the following variables:
+Integrado em todos os agentes. Controlado via env var `LOCALE` (default `pt-BR`).
+
+```python
+from src.locale import get_locale
+
+locale = get_locale("pt-BR")  # ou "es" (precisa adapter)
+prompt = locale.get_prompt("enricher", name="Clínica", address="...")
+field = locale.get_field_name("profile_summary")  # → "resumo_perfil"
+faixa = locale.get_score_category(72)  # → "quente"
+```
+
+Agentes com locale integrado:
+- **Enricher** — prompt, fallbacks, field names
+- **Scorer** — prompt, score category, fallbacks
+- **Messenger** — prompt, template fallback, opt-out, status
+- **Researcher** — prompt, status, field names
+- **SkepticAgent** — heurísticas H2/H4/H6/H7 via locale markers
+- **Server** — erros HTTP localizados (env, auth, rate limit, 500s)
+
+## API Endpoints
+
+| Método | Rota | Pipeline | Descrição |
+|---|---|---|---|
+| POST | `/enrich` | Prospecção | Enriquecer lead com dossiê |
+| POST | `/score` | Prospecção | Pontuar lead (requer dossiê) |
+| POST | `/generate_message` | Prospecção | Gerar mensagem WhatsApp |
+| POST | `/research` | Prospecção | Pesquisar lead (score ≥ 70) |
+| POST | `/crm_sync` | Prospecção | Sincronizar com CRM |
+| POST | `/discourse/ingest` | Discurso | Ingerir fragmento de discurso |
+| POST | `/discourse/extract` | Discurso | Ingestão + Language Game |
+| POST | `/resonance/analyze` | Discurso | Clusterizar padrões |
+| POST | `/resonance/lookup` | Discurso | Buscar padrões similares |
+| POST | `/prospects/generate` | Discurso | Gerar perfil de prospect |
+| POST | `/resonance/signal` | Discurso | Registrar sinal de mercado |
+| GET | `/health` | — | Health check (ChromaDB) |
+| GET | `/metrics` | — | Prometheus metrics |
+
+## Setup
+
+### Pré-requisitos
+
+- Docker e Docker Compose
+- Python 3.11+
+- API keys: LiteLLM (DeepSeek, Qwen, Moonshot), WhatsApp Evolution API
+
+### Variáveis de Ambiente
 
 ```env
-# LiteLLM Configuration
+# LiteLLM
 LITELLM_URL=http://litellm:4000
-QWEN_VL_MAX_API_KEY=your_qwen_vl_max_key
-DEEPSEEK_CHAT_API_KEY=your_deepseek_chat_key
+QWEN_VL_MAX_API_KEY=your_qwen_key
+DEEPSEEK_CHAT_API_KEY=your_deepseek_key
 MOONSHOT_V1_128K_API_KEY=your_moonshot_key
 
-# WhatsApp Evolution API
-EVOLUTION_API_URL=your_evolution_api_url
-EVOLUTION_API_KEY=your_evolution_api_key
+# WhatsApp
+EVOLUTION_API_URL=your_evolution_url
+EVOLUTION_API_KEY=your_evolution_key
 EVOLUTION_INSTANCE_ID=your_instance_id
 
-# CRM Configuration
-CRM_PROVIDER=notion  # or airtable, nocodb
+# CRM
+CRM_PROVIDER=notion  # notion, airtable, nocodb
 
-# Database Configuration
-POSTGRES_HOST=postgres
-POSTGRES_PORT=5432
-POSTGRES_DB=kirin
-POSTGRES_USER=kirin
-POSTGRES_PASSWORD=your_secure_password_here
+# Locale
+LOCALE=pt-BR
 
-QDRANT_HOST=qdrant
-QDRANT_PORT=6333
-
-REDIS_HOST=redis
-REDIS_PORT=6379
-REDIS_PASSWORD=your_redis_password  # optional
-REDIS_DB=0
+# Storage
+CHROMA_PATH=./data/chroma
 ```
 
-### Running with Docker Compose
+### Docker Compose
 
 ```bash
-# Start all services
 docker-compose up -d
-
-# The API will be available at http://localhost:8000
-# API documentation at http://localhost:8000/docs
+# API em http://localhost:8000
+# Docs em http://localhost:8000/docs
 ```
 
-### Running Agents Directly
+### Manual
 
 ```bash
-# Install dependencies
 pip install -r agents/requirements.txt
-
-# Set environment variables (copy from .env or set individually)
 export LITELLM_URL=http://localhost:4000
-# ... other variables
-
-# Run the server
+# ... outras vars
 uvicorn agents.server:app --host 0.0.0.0 --port 8000
 ```
 
-## Testing
-
-Run the test suite to verify functionality:
+## Testes
 
 ```bash
-# Run unit and property-based tests
-cd tests && python -m pytest test_units.py test_properties.py -v -p no:asyncio
+pytest tests/ -q
+# 181 passed
 ```
 
-## Memory Layer Usage Examples
+Cobertura atual:
+- `test_units.py` — Funções puras (normalize_score, classify_faixa, dedup...)
+- `test_properties.py` — Testes baseados em Hypothesis (20+ invariantes)
+- `test_skeptic_agent.py` — SkepticAgent (7 heurísticas)
+- `test_enricher_mock.py` — Mock de LLM para enricher, scorer, messenger
+- `test_eval_integration.py` — Eval harness e LLM judge
+- `test_llm_judge.py` — Model-graded judges
+- `test_store.py` — ChromaStore (CRUD, cache, dedup, search)
+- `test_locale.py` — LocalePort (fields, score, status, fallbacks, prompts)
+- `test_analysis.py` — Models + templates
+- `test_analysis_pipeline.py` — Pipeline parsing/validação/fallback (32 testes)
 
-### Storing Lead Memory
+## Estrutura do Projeto
 
-```python
-from agents.runtime import get_postgres_memory
-from agents.memory.factory import MemoryFactory
-
-# Get memory manager instance
-postgres = get_postgres_memory()
-
-# Store lead memory
-await postgres.store_lead_memory(
-    lead_id="google_maps_id_123",
-    memory_type="dossie",
-    data={
-        "resumo_perfil": "Local restaurant with great reviews",
-        "pontos_fracos": ["No website", "Limited social media"],
-        "oportunidades": ["Create online ordering system"],
-        "maturidade_digital": "baixo"
-    }
-)
+```
+├── agents/
+│   ├── server.py              # FastAPI app (endpoints, auth, rate limit)
+│   ├── enricher.py            # Enricher Agent
+│   ├── scorer.py              # Scorer Agent
+│   ├── messenger.py           # Messenger Agent
+│   ├── researcher.py          # Researcher Agent
+│   ├── skeptic.py             # SkepticAgent (7 heurísticas)
+│   ├── factory.py             # ServiceFactory (LLM, WhatsApp)
+│   ├── runtime.py             # ChromaStore singleton
+│   ├── pure_functions.py      # Funções puras (score, status, truncate)
+│   ├── models.py              # Dataclasses (Lead, CampaignConfig)
+│   ├── schemas.py             # Pydantic schemas (request validation)
+│   ├── crm_connector.py       # CRM adapters (Notion, Airtable, NocoDB)
+│   ├── metrics.py             # Prometheus counters/histograms
+│   ├── discourse_*.py         # Re-exports from src.analysis
+│   ├── ports/
+│   │   ├── llm_client.py      # ILLMClient (ABC)
+│   │   └── whatsapp_gateway.py # IWhatsAppGateway (ABC)
+│   └── adapters/
+│       ├── litellm_adapter.py  # LiteLLM → ILLMClient
+│       ├── evolution_api_adapter.py  # Evolution → IWhatsAppGateway
+│       └── openwa_adapter.py  # OpenWA → IWhatsAppGateway
+├── src/
+│   ├── store.py               # ChromaStore
+│   ├── analysis/
+│   │   ├── models.py          # Dataclasses (DiscourseFragment, Analysis...)
+│   │   ├── templates.py       # Prompt builders (8 templates)
+│   │   ├── analyzer.py        # Ingestão + Language Game
+│   │   └── resonance.py       # Resonance Engine + Prospect
+│   └── locale/
+│       ├── port.py            # LocalePort (ABC)
+│       ├── factory.py         # get_locale() (registry pattern)
+│       ├── errors.py
+│       ├── adapters/
+│       │   └── pt_br.py       # PTBRLocaleAdapter (implementação completa)
+│       └── prompts/
+│           ├── pt-BR/         # 10 templates .prompt.md
+│           │   ├── enricher.prompt.md
+│           │   ├── scorer.prompt.md
+│           │   ├── messenger.prompt.md
+│           │   ├── researcher.prompt.md
+│           │   ├── discourse_ingestion.prompt.md
+│           │   ├── language_game.prompt.md
+│           │   ├── resonance.prompt.md
+│           │   ├── prospect.prompt.md
+│           │   ├── llm_judge_system.prompt.md
+│           │   └── llm_judge_criteria.prompt.md
+│           └── es/            # Placeholder para expansão
+├── eval/
+│   ├── kirin_eval_harness.py  # Eval framework (6 dimensões)
+│   └── llm_judge.py           # Model-graded judges
+├── tests/                     # Test suite (7 arquivos)
+├── docker-compose.yml         # 2 serviços (litellm + agents)
+└── pyproject.toml
 ```
 
-### Retrieving Interaction History
+## Extending
 
-```python
-from agents.runtime import get_postgres_memory
+### Novo Agente
+1. Criar módulo em `agents/novo_agente.py`
+2. Usar `ServiceFactory.get_llm_client()` ou `get_whatsapp_gateway()`
+3. Persistir via `runtime.get_store()`
+4. Adicionar endpoint em `server.py`
 
-postgres = get_postgres_memory()
-history = await postgres.retrieve_interaction_history(
-    lead_id="google_maps_id_123",
-    limit=10
-)
-```
+### Novo Locale
+1. Criar `src/locale/adapters/{locale}.py` implementando `LocalePort`
+2. Traduzir prompts em `src/locale/prompts/{locale}/*.prompt.md`
+3. Registrar via `register_locale("es", ESLocaleAdapter())`
 
-### Storing Conversation Context
+### Nova Fonte de Discurso
+1. Adicionar source a `VALID_SOURCES` em `src/analysis/analyzer.py`
+2. Ajustar prompts se necessário
 
-```python
-from agents.runtime import get_redis_memory
+## Monitoramento
 
-redis = get_redis_memory()
-await redis.store_conversation_context(
-    lead_id="google_maps_id_123",
-    context={
-        "last_message": "Hello, how can I help you today?",
-        "timestamp": "2026-05-27T10:30:00Z",
-        "user_intent": "inquiring_hours"
-    },
-    ttl=3600  # 1 hour
-)
-```
-
-### Similarity Search
-
-```python
-from agents.runtime import get_qdrant_memory
-import numpy as np
-
-qdrant = get_qdrant_memory()
-# Generate embedding for a lead (using your preferred method)
-query_vector = np.random.rand(384).tolist()  # Example dimension
-
-similar_leads = await qdrant.search_similar_memories(
-    query_vector=query_vector,
-    memory_type="lead_embedding",
-    limit=5
-)
-```
-
-## Extending the Platform
-
-### Adding New Memory Types
-
-To add a new type of memory storage:
-1. Create a new manager class in `agents/memory/` inheriting from `BaseMemoryManager`
-2. Implement the required abstract methods
-3. Register the manager in `agents/memory/factory.py`
-4. Initialize it in `agents/runtime.py`
-
-### Adding New Agents
-
-To add a new specialized agent:
-1. Create a new module in `agents/` (e.g., `agents/new_agent.py`)
-2. Implement the agent's core logic
-3. Add API endpoints in `agents/server.py` if needed
-4. Update the agent to use memory managers for persistence
-
-## Monitoring and Metrics
-
-The platform exposes Prometheus metrics at `/metrics` endpoint:
-- `kirin_leads_extracted_total` - Number of leads extracted
-- `kirin_enrichment_success_total` - Successful enrichments
-- `kirin_enrichment_failed_total` - Failed enrichments
-- `kirin_lead_score` - Distribution of lead scores
-- `kirin_messages_sent_total` - Messages sent by status
-- `kirin_errors_total` - Errors by component
-- `kirin_active_leads` - Currently active leads in memory
-
-Health checks:
-- `/health` - Overall service health
-- `/memory/health` - Individual memory manager status
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- Built with FastAPI, Uvicorn, and Python 3.13
-- Uses PostgreSQL, Qdrant, and Redis for memory storage
-- Leverages LiteLLM for LLM abstraction
-- Inspired by cognitive architecture patterns
+Métricas Prometheus em `/metrics`:
+- `kirin_leads_extracted_total` — Leads extraídos
+- `kirin_enrichment_success_total` — Enriquecimentos bem-sucedidos
+- `kirin_enrichment_failed_total` — Enriquecimentos falhos
+- `kirin_lead_score` — Distribuição de scores
+- `kirin_messages_sent_total` — Mensagens por status
+- `kirin_errors_total` — Erros por componente
+- `kirin_active_leads` — Leads ativos
+- `kirin_discourse_ingested_total` — Fragmentos ingeridos
+- `kirin_language_game_analyzed_total` — Análises realizadas
+- `kirin_resonance_lookup_total` — Consultas de ressonância
+- `kirin_prospect_generated_total` — Prospects gerados

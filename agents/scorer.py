@@ -7,10 +7,12 @@ import json
 import re
 import logging
 from typing import Dict, Any, Optional
-from agents.pure_functions import normalize_score, classify_faixa, truncate_dossie_for_scoring
+from agents.pure_functions import normalize_score, truncate_dossie_for_scoring
 from . import runtime
 from .factory import ServiceFactory
 from .ports.llm_client import LLMMessage, LLMError
+from src.locale import get_locale, LocalePort
+from agents.skeptic import check_agent_output
 
 logger = logging.getLogger(__name__)
 
@@ -24,25 +26,17 @@ RETRY_DELAY = 5.0
 RATE_LIMIT_DELAY = 60.0
 
 
-async def score_lead(dossie: Dict[str, Any], litellm_url: str = None, api_key: str = None) -> Dict[str, Any]:
-    """
-    Score lead using DeepSeek via ILLMClient port.
-    """
+async def score_lead(
+    dossie: Dict[str, Any],
+    litellm_url: str = None,
+    api_key: str = None,
+    locale: Optional[LocalePort] = None,
+) -> Dict[str, Any]:
     llm = ServiceFactory.get_llm_client()
-
-    memory_context = ""
-    try:
-        from integrations.agentmemory_client import smart_search, observe
-        query = f"{dossie.get('resumo_perfil', '')} {dossie.get('maturidade_digital', '')}"
-        results = await smart_search(query, limit=3)
-        if results:
-            snippets = [r.get("content", r.get("observation", "")) for r in results if r]
-            memory_context = "\n".join(f"- {s}" for s in snippets if s)
-    except Exception:
-        pass
+    locale = locale or get_locale("pt-BR")
 
     dossie_trimmed = truncate_dossie_for_scoring(dossie)
-    prompt = _build_scoring_prompt(dossie_trimmed, memory_context)
+    prompt = _build_scoring_prompt(dossie_trimmed, locale)
 
     messages = [LLMMessage(role="user", content=prompt)]
 
@@ -61,29 +55,21 @@ async def score_lead(dossie: Dict[str, Any], litellm_url: str = None, api_key: s
             except json.JSONDecodeError:
                 scoring_data = _parse_scoring_text(response.content)
 
-            score_result = _validate_and_structure_score(scoring_data)
+            score_result = _validate_and_structure_score(scoring_data, locale)
 
             scored_lead = dossie.copy()
             scored_lead.update({
                 "score": score_result["score"],
                 "score_justification": score_result["justification"],
                 "faixa": score_result["faixa"],
-                "status": "qualificado"
+                "status": locale.get_status_label("qualified"),
             })
 
-            try:
-                await observe(
-                    dossie.get("id", "unknown"),
-                    {
-                        "agent": "scorer",
-                        "resumo": dossie.get("resumo_perfil", "")[:200],
-                        "maturidade_digital": dossie.get("maturidade_digital"),
-                        "score": score_result["score"],
-                        "faixa": score_result["faixa"],
-                    }
-                )
-            except Exception:
-                pass
+            report = check_agent_output("scorer", score_result, {
+                "dossier": dossie,
+            }, locale)
+            if not report.passed:
+                scored_lead["skeptic_report"] = report.to_dict()
 
             await _store_scoring_in_memory(dossie, score_result)
 
@@ -93,69 +79,48 @@ async def score_lead(dossie: Dict[str, Any], litellm_url: str = None, api_key: s
             if attempt < MAX_RETRIES:
                 await asyncio.sleep(RETRY_DELAY)
                 continue
-            return _scoring_fallback(dossie, f"LLM error: {str(e)}")
+            return _scoring_fallback(dossie, f"LLM error: {str(e)}", locale)
         except Exception as e:
             if attempt < MAX_RETRIES:
                 await asyncio.sleep(RETRY_DELAY)
                 continue
-            return _scoring_fallback(dossie, f"Scoring error: {str(e)}")
+            return _scoring_fallback(dossie, f"Scoring error: {str(e)}", locale)
 
-    return _scoring_fallback(dossie, "Unknown scoring error")
+    return _scoring_fallback(dossie, "Unknown scoring error", locale)
 
 
-def _build_scoring_prompt(dossie: Dict[str, Any], memory_context: str = "") -> str:
-    """Build prompt for the scoring model."""
-    resumo_perfil = dossie.get("resumo_perfil", "Perfil não disponível")
-    pontos_fracos = dossie.get("pontos_fracos", [])
-    oportunidades = dossie.get("oportunidades", [])
-    maturidade_digital = dossie.get("maturidade_digital", "médio")
+def _build_scoring_prompt(dossie: Dict[str, Any], locale: Optional[LocalePort] = None) -> str:
+    locale = locale or get_locale("pt-BR")
+    profile_summary = dossie.get("resumo_perfil", locale.get_fallback("profile_not_available"))
+    weaknesses = dossie.get("pontos_fracos", [])
+    opportunities = dossie.get("oportunidades", [])
+    digital_maturity = dossie.get("maturidade_digital", locale.get_fallback("medium_maturity"))
 
-    pontos_fracos_str = "\n".join([f"- {p}" for p in pontos_fracos]) if pontos_fracos else "Nenhum ponto fraco identificado"
-    oportunidades_str = "\n".join([f"- {o}" for o in oportunidades]) if oportunidades else "Nenhuma oportunidade identificada"
+    weaknesses_str = "\n".join(f"- {w}" for w in weaknesses) if weaknesses else locale.get_fallback("no_weaknesses")
+    opportunities_str = "\n".join(f"- {o}" for o in opportunities) if opportunities else locale.get_fallback("no_opportunities")
 
-    memory_block = ""
-    if memory_context:
-        memory_block = f"""
-    CONTEXTO DE LEADS SIMILARES PROCESSADOS ANTERIORMENTE:
-{memory_context}
-    (Use como referência para calibrar o score, mas avalie o dossiê atual de forma independente.)
-"""
+    cold = locale.get_score_category(20)
+    warm = locale.get_score_category(50)
+    hot = locale.get_score_category(80)
 
-    prompt = f"""
-    Você é um especialista em scoring de leads comerciais. Avalie o dossiê do seguinte estabelecimento e atribua uma pontuação de 0 a 100:
-{memory_block}
-    DOSSiÊ:
-    - Resumo do perfil: {resumo_perfil}
-    - Pontos fracos:
-    {pontos_fracos_str}
-    - Oportunidades:
-    {oportunidades_str}
-    - Maturidade digital: {maturidade_digital}
-
-    Com base nessas informações, attribue uma pontuação de 0 a 100 onde:
-    - 0-39: Lead frio (baixa probabilidade de conversão)
-    - 40-69: Lead morno (média probabilidade de conversão)
-    - 70-100: Lead quente (alta probabilidade de conversão)
-
-    Forneça sua resposta em formato JSON com os seguintes campos:
-    - score: Número inteiro entre 0 e 100
-    - justification: Justificativa da pontuação com 3-5 frases
-    - faixa: Classificação em "frio", "morno" ou "quente" (baseada na pontuação)
-
-    Responda APENAS com o JSON válido, sem texto adicional.
-    """
-
-    return prompt.strip()
+    return locale.get_prompt("scorer",
+        memory_block="",
+        profile_summary=profile_summary,
+        weaknesses_str=weaknesses_str,
+        opportunities_str=opportunities_str,
+        digital_maturity=digital_maturity,
+        cold=cold,
+        warm=warm,
+        hot=hot,
+        json_only_suffix=locale.get_json_only_suffix(),
+    )
 
 
 def _parse_scoring_text(text: str) -> Dict[str, Any]:
-    """
-    Parse scoring information from text response when JSON is not valid.
-    """
     result = {
         "score": 50,
         "justification": "Pontuação padrão devido à dificuldade de interpretar a resposta.",
-        "faixa": "morno"
+        "faixa": "morno",
     }
 
     score_match = re.search(r'(\d+)', text)
@@ -172,15 +137,11 @@ def _parse_scoring_text(text: str) -> Dict[str, Any]:
         if justification:
             result["justification"] = justification
 
-    result["faixa"] = classify_faixa(result["score"])
-
     return result
 
 
-def _validate_and_structure_score(data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Validate and structure the score data.
-    """
+def _validate_and_structure_score(data: Dict[str, Any], locale: Optional[LocalePort] = None) -> Dict[str, Any]:
+    locale = locale or get_locale("pt-BR")
     raw_score = data.get("score", 50)
     try:
         score = int(raw_score)
@@ -188,48 +149,39 @@ def _validate_and_structure_score(data: Dict[str, Any]) -> Dict[str, Any]:
         score = 50
 
     score = normalize_score(score)
-    justification = str(data.get("justification", "Justificativa não fornecida."))
-    faixa = classify_faixa(score)
-
-    provided_faixa = str(data.get("faixa", "")).lower()
-    if provided_faixa in ["frio", "morno", "quente"]:
-        faixa = provided_faixa
-    else:
-        faixa = classify_faixa(score)
+    justification = str(data.get("justification", locale.get_fallback("profile_not_available")))
 
     return {
         "score": score,
         "justification": justification,
-        "faixa": faixa
+        "faixa": locale.get_score_category(score),
     }
 
 
-def _scoring_fallback(dossie: Dict[str, Any], error_reason: str) -> Dict[str, Any]:
-    """
-    Provide fallback scoring when LLM is unavailable.
-    """
+def _scoring_fallback(dossie: Dict[str, Any], error_reason: str, locale: Optional[LocalePort] = None) -> Dict[str, Any]:
+    locale = locale or get_locale("pt-BR")
     score = _calculate_fallback_score(dossie)
-    justification = f"Pontuação calculada automaticamente devido a: {error_reason}. "
-    justification += f"Análise baseada em maturidade digital ({dossie.get('maturidade_digital', 'médio')}) e disponibilidade de informações."
-    faixa = classify_faixa(score)
+    justification = (
+        f"Pontuação calculada automaticamente devido a: {error_reason}. "
+        f"Análise baseada em maturidade digital ({dossie.get('maturidade_digital', locale.get_fallback('medium_maturity'))}) "
+        f"e disponibilidade de informações."
+    )
+    faixa = locale.get_score_category(score)
 
     scored_lead = dossie.copy()
     scored_lead.update({
         "score": score,
         "score_justification": justification,
         "faixa": faixa,
-        "status": "qualificado",
+        "status": locale.get_status_label("qualified"),
         "scoring_fallback": True,
-        "scoring_error": error_reason
+        "scoring_error": error_reason,
     })
 
     return scored_lead
 
 
 def _calculate_fallback_score(dossie: Dict[str, Any]) -> int:
-    """
-    Calculate a fallback score based on dossiê characteristics.
-    """
     score = 50
 
     maturidade = dossie.get("maturidade_digital", "médio")
@@ -254,19 +206,12 @@ def _calculate_fallback_score(dossie: Dict[str, Any]) -> int:
 
 
 async def _store_scoring_in_memory(dossie: Dict[str, Any], score_result: Dict[str, Any]) -> None:
-    """
-    Store scoring result in memory managers if available.
-    """
     try:
         lead_id = dossie.get("id")
         if not lead_id:
-            logger.debug("No lead identifier found in dossie, skipping memory storage for scoring")
             return
-
-        postgres_mem = runtime.get_postgres_memory()
-
-        if postgres_mem:
-            await postgres_mem.store_lead_memory(lead_id, "scoring", score_result)
-
+        store = runtime.get_store()
+        if store:
+            await store.store_lead_memory(lead_id, "scoring", score_result)
     except Exception as e:
-        logger.warning(f"Failed to store scoring in memory for lead {lead_id}: {e}")
+        logger.warning(f"Failed to store scoring for lead {lead_id}: {e}")

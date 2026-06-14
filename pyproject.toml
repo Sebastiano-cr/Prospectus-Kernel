@@ -1,21 +1,9 @@
 [tool.pytest.ini_options]
 norecursedirs = [
-    ".git",
-    "__pycache__",
-    "*.egg-info",
-    ".hypothesis",
-    ".pytest_cache",
-    "postgres_data",
-    "qdrant_data",
-    "redis_data",
-    "prometheus_data",
-    "loki_data",
-    "grafana_data",
-    "evolution_data",
-    "mongo_data",
-    "n8n_data",
+    ".git", "__pycache__", "*.egg-info",
+    ".hypothesis", ".pytest_cache", "data",
     "node_modules",
 ]
 
 [tool.setuptools.packages.find]
-include = ["agents*", "integrations*"]
+include = ["agents*", "src*", "eval*"]

@@ -2,6 +2,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 
+from agents.ports.llm_client import LLMResponse
 from agents.enricher import _validate_and_structure_dossie, _mark_enrichment_failed
 from agents.messenger import _generate_template_message
 from agents.pure_functions import can_send_message_sync
@@ -11,17 +12,26 @@ class TestEnricherMock:
     """Testes do enricher usando mocks."""
 
     @pytest.mark.asyncio
-    async def test_enrich_with_mock_litellm(self, mock_litellm_enrich, sample_lead):
-        """Testa o fluxo completo do enricher mockando o LiteLLM."""
+    async def test_enrich_with_mock_litellm(self, sample_lead):
+        """Testa o fluxo completo do enricher mockando o LLM client."""
         from agents.enricher import enrich_lead
+        from agents.factory import ServiceFactory
 
-        with patch("agents.enricher.httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.__aenter__.return_value.post = AsyncMock(
-                return_value=mock_litellm_enrich
-            )
-            mock_client.return_value = mock_instance
+        content = (
+            '{\n'
+            '  "resumo_perfil": "Restaurante tradicional com comida caseira",\n'
+            '  "pontos_fracos": ["Nao possui website", "Pouca presenca digital"],\n'
+            '  "oportunidades": ["Criar site", "Delivery online"],\n'
+            '  "maturidade_digital": "baixo"\n'
+            '}'
+        )
 
+        mock_llm = AsyncMock()
+        mock_llm.complete.return_value = LLMResponse(
+            content=content, model="deepseek-chat"
+        )
+
+        with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
             result = await enrich_lead(
                 sample_lead,
                 litellm_url="http://test:4000",

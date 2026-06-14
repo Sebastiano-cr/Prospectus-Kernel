@@ -2,9 +2,6 @@
 CRM Connector for the Kirin platform.
 Provides abstract base class and concrete implementations for various CRM systems.
 """
-import abc
-import asyncio
-import json
 import logging
 from typing import Dict, Any, Optional
 from abc import ABC, abstractmethod
