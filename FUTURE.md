@@ -77,5 +77,25 @@ status = locale.get_status_label("qualified")
 5. Rodar `ruff check agents/ src/` — 0 erros
 6. Commit + push
 
-### Quando executar
-Após processar 1 lead real (prioridade máxima) ou quando o overengineering começar a atrapalhar desenvolvimento de novas features.
+## Status: Fase 0 Completa ✅
+
+Processado 1 lead real end-to-end em **27 de junho de 2026**:
+- `scripts/process_one_lead.py` — pipeline completo com Ollama (qwen2.5:3b)
+- Lead: Clínica Bella Estética → dossiê (maturidade: baixo) → score (20/100, frio) → mensagem personalizada
+- Tempo total: ~2.5 min (enrich: 55s, score: 56s, message: 39s)
+- Custo: R$ 0,00 (LLM local gratuito)
+- **Checklist de saída: 5/5** ✅ (pendente: WhatsApp delivery — requer EVOLUTION_URL)
+
+## Próximo: Fase 1 (Product-Market Fit, 1 → 10 leads)
+- [ ] Streamlit UI (`streamlit_ui.py`)
+- [ ] A/B testing
+- [ ] CSV export
+- [ ] Qwen fallback (já funcional via Ollama)
+
+### Ordem de execução (para próxima sessão)
+1. `agents/llm_client.py` + atualizar imports
+2. Apagar `agents/ports/`, `agents/adapters/`, `agents/factory.py`
+3. Simplificar `src/locale/` (port + factory → __init__.py)
+4. Rodar `pytest tests/ -q` — 197 devem passar
+5. Rodar `ruff check agents/ src/` — 0 erros
+6. Commit + push
