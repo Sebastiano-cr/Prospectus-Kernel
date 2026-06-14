@@ -8,7 +8,13 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 import uvicorn
 from agents.runtime import initialize_memory_managers, shutdown_memory_managers_async
-from agents.config import CHROMA_PATH, LOCALE_CODE, get_locale_instance
+from agents.config import CHROMA_PATH, get_locale_instance
+from agents.routes.management import router as management_router
+from agents.routes.leads import router as leads_router
+from agents.routes.messaging import router as messaging_router
+from agents.routes.research import router as research_router
+from agents.routes.discourse import router as discourse_router
+from agents.routes.resonance import router as resonance_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -42,13 +48,6 @@ async def shutdown_event():
 
 
 # ── Routes ────────────────────────────────────────────────────────────────
-
-from agents.routes.management import router as management_router
-from agents.routes.leads import router as leads_router
-from agents.routes.messaging import router as messaging_router
-from agents.routes.research import router as research_router
-from agents.routes.discourse import router as discourse_router
-from agents.routes.resonance import router as resonance_router
 
 app.include_router(management_router)
 app.include_router(leads_router)
