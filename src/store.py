@@ -17,6 +17,39 @@ from chromadb.config import Settings
 logger = logging.getLogger(__name__)
 
 
+def _reconnect_on_failure(method):
+    """Decorator que reconecta ao ChromaDB automaticamente se a conexão cair."""
+    import functools
+
+    @functools.wraps(method)
+    async def wrapper(self, *args, **kwargs):
+        try:
+            return await method(self, *args, **kwargs)
+        except Exception as e:
+            err_str = str(e).lower()
+            is_conn_error = any(
+                kw in err_str
+                for kw in ["connection", "connect", "timeout", "refused", "reset", "broken", "closed"]
+            )
+            if not is_conn_error or self._in_reconnect:
+                raise
+            logger.warning(f"ChromaDB connection lost on {method.__name__}, attempting reconnect: {e}")
+            self._initialized = False
+            self._client = None
+            self._in_reconnect = True
+            try:
+                await self.initialize()
+                logger.info("ChromaDB reconnected, retrying operation")
+                return await method(self, *args, **kwargs)
+            except Exception as re:
+                logger.error(f"ChromaDB reconnect failed: {re}")
+                raise
+            finally:
+                self._in_reconnect = False
+
+    return wrapper
+
+
 class ChromaStore:
     """
     Unified storage layer backed by ChromaDB.
@@ -32,6 +65,7 @@ class ChromaStore:
         self._cache_ttl: Dict[str, float] = {}
         self._cache_max = 1000
         self._initialized = False
+        self._in_reconnect = False
 
     async def initialize(self) -> None:
         if self._initialized:
@@ -60,6 +94,24 @@ class ChromaStore:
             self._initialized = False
             return False
 
+    async def ensure_connection(self) -> bool:
+        """Tenta reconectar se o ChromaDB caiu. Retorna True se saudável."""
+        if await self.ready():
+            return True
+        logger.info("Attempting ChromaDB reconnection...")
+        self._collections.clear()
+        self._client = None
+        self._initialized = False
+        try:
+            await self.initialize()
+            ok = await self.ready()
+            if ok:
+                logger.info("ChromaDB reconnected successfully")
+            return ok
+        except Exception as e:
+            logger.error(f"ChromaDB reconnection failed: {e}")
+            return False
+
     async def shutdown(self) -> None:
         self._collections.clear()
         self._cache.clear()
@@ -70,7 +122,10 @@ class ChromaStore:
 
     def _collection(self, name: str) -> chromadb.Collection:
         coll_name = f"{self._prefix}{name}"
-        if coll_name not in self._collections:
+        if coll_name not in self._collections or not self._initialized:
+            self._collections.pop(coll_name, None)
+            if not self._initialized or not self._client:
+                raise RuntimeError("ChromaDB not initialized")
             self._collections[coll_name] = self._client.get_or_create_collection(
                 name=coll_name,
                 metadata={"hnsw:space": "cosine"},
@@ -100,6 +155,7 @@ class ChromaStore:
             logger.error(f"Failed to store lead memory {lead_id}:{memory_type}: {e}")
             return False
 
+    @_reconnect_on_failure
     async def retrieve_lead_memory(
         self, lead_id: str, memory_type: str
     ) -> Optional[Dict[str, Any]]:

@@ -11,12 +11,14 @@ logger = logging.getLogger(__name__)
 
 _store: Optional[ChromaStore] = None
 _initialized: bool = False
+_health_task: Optional[asyncio.Task] = None
 _MAX_INIT_RETRIES = 5
 _INIT_RETRY_DELAY = 3.0
+_HEALTH_CHECK_INTERVAL = 30.0  # segundos entre checks de saúde
 
 
 async def initialize_memory_managers(config: dict) -> None:
-    global _store, _initialized
+    global _store, _initialized, _health_task
 
     if _initialized:
         logger.warning("Memory already initialized. Skipping.")
@@ -30,6 +32,8 @@ async def initialize_memory_managers(config: dict) -> None:
             await _store.initialize()
             _initialized = True
             logger.info("ChromaStore initialized (replaces PostgreSQL + Qdrant + Redis)")
+            # Inicia health check background
+            _health_task = asyncio.create_task(_health_loop())
             return
         except Exception as e:
             logger.warning(f"ChromaStore init attempt {attempt + 1} failed: {e}")
@@ -42,8 +46,34 @@ async def initialize_memory_managers(config: dict) -> None:
     raise RuntimeError("Failed to initialize ChromaStore after multiple retries")
 
 
-async def shutdown_memory_managers_async() -> None:
+async def _health_loop() -> None:
+    """Background task que verifica saúde do ChromaDB e reconecta se necessário."""
     global _store, _initialized
+    while True:
+        try:
+            await asyncio.sleep(_HEALTH_CHECK_INTERVAL)
+            if _store and _initialized:
+                ok = await _store.ensure_connection()
+                if not ok:
+                    logger.warning("ChromaDB health check failed — will retry")
+                else:
+                    _initialized = True
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception(f"Health check error: {e}")
+
+
+async def shutdown_memory_managers_async() -> None:
+    global _store, _initialized, _health_task
+
+    if _health_task:
+        _health_task.cancel()
+        try:
+            await _health_task
+        except asyncio.CancelledError:
+            pass
+        _health_task = None
 
     if _initialized and _store:
         await _store.shutdown()
