@@ -8,8 +8,7 @@ from typing import Dict, Any, Optional
 import logging
 from .pure_functions import truncate_message
 from . import runtime
-from .factory import ServiceFactory
-from .ports.llm_client import LLMMessage, LLMError
+from .llm_client import LLMMessage, LLMError, llm_complete
 from src.locale import get_locale, LocalePort
 from agents.skeptic import check_agent_output
 
@@ -29,7 +28,6 @@ async def enrich_lead(
     api_key: str = None,
     locale: Optional[LocalePort] = None,
 ) -> Dict[str, Any]:
-    llm = ServiceFactory.get_llm_client()
     locale = locale or get_locale("pt-BR")
     prompt = _build_enrichment_prompt(lead, locale)
 
@@ -37,7 +35,7 @@ async def enrich_lead(
 
     for attempt in range(MAX_RETRIES + 1):
         try:
-            response = await llm.complete(
+            response = await llm_complete(
                 messages=messages,
                 model="qwen-vl-max",
                 temperature=0.3,

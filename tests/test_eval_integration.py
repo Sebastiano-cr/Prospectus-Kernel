@@ -14,7 +14,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from eval.kirin_eval_harness import (
     KirinEvalHarness, JudgeFactory, Dimension, EvalReport
 )
-from agents.skeptic import SkepticAgent
 
 
 # --- Fixtures ---

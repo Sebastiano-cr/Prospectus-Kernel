@@ -1,13 +1,12 @@
 """
 Testes end-to-end do pipeline de Discourse (sem LLM — testa parsing, validação e fallbacks).
 """
-import pytest
 from src.analysis.analyzer import (
     _validate_source, _fragment_id, _validate_fragment, _validate_analysis,
     _parse_fragment_text, _parse_analysis_text,
     _build_fallback_fragment, _build_fallback_analysis,
     _calculate_tension_score,
-    VALID_SOURCES, VALID_OBJECTION_TYPES,
+    VALID_SOURCES,
 )
 from src.analysis.resonance import (
     _validate_cluster, _validate_prospect,

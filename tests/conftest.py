@@ -6,7 +6,6 @@ permitindo testar a lógica dos agentes sem dependências externas.
 """
 import pytest
 from typing import Any, Dict
-from unittest.mock import AsyncMock, MagicMock
 
 
 class MockResponse:

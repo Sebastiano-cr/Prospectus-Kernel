@@ -1,7 +1,6 @@
 """
 Testes para src/analysis/ — models, templates, analyzer, resonance (unit).
 """
-import pytest
 from src.analysis.models import (
     DiscourseFragment, LanguageGameAnalysis, ResonanceCluster,
     ResonanceSignal, ProspectProfile, IngestionResult,

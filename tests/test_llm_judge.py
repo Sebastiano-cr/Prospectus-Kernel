@@ -10,7 +10,6 @@ Cobertura:
 import pytest
 import sys
 import os
-import json
 from unittest.mock import AsyncMock, patch, MagicMock
 
 # Adicionar o diretório raiz ao path

@@ -3,7 +3,7 @@ Testes de integração — locale espanhol com agentes mockados.
 """
 import pytest
 from unittest.mock import AsyncMock, patch
-from agents.ports.llm_client import LLMResponse
+from agents.llm_client import LLMResponse
 from src.locale import get_locale
 
 
@@ -54,16 +54,13 @@ sección de madurez digital: bajo"""
     async def test_enrich_lead_es_locale(self, sample_lead):
         """Testa enrich_lead completo com locale=es e LLM mockado."""
         from agents.enricher import enrich_lead
-        from agents.factory import ServiceFactory
         locale = get_locale("es")
 
-        mock_llm = AsyncMock()
-        mock_llm.complete.return_value = LLMResponse(
-            content='{"resumo_perfil": "Pizzería familiar auténtica", "pontos_fracos": ["sin web"], "oportunidades": ["delivery"], "maturidade_digital": "bajo"}',
-            model="qwen-vl-max"
-        )
-
-        with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
+        with patch("agents.enricher.llm_complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = LLMResponse(
+                content='{"resumo_perfil": "Pizzería familiar auténtica", "pontos_fracos": ["sin web"], "oportunidades": ["delivery"], "maturidade_digital": "bajo"}',
+                model="qwen-vl-max"
+            )
             result = await enrich_lead(sample_lead, litellm_url="http://test:4000", api_key="test-key", locale=locale)
 
         assert result["enrichment_success"] is True
@@ -78,16 +75,13 @@ class TestESLocaleScorer:
     @pytest.mark.asyncio
     async def test_score_lead_es_locale(self, sample_dossie):
         from agents.scorer import score_lead
-        from agents.factory import ServiceFactory
         locale = get_locale("es")
 
-        mock_llm = AsyncMock()
-        mock_llm.complete.return_value = LLMResponse(
-            content='{"score": 65, "justification": "tiene oportunidades", "category": "tibio"}',
-            model="deepseek-chat"
-        )
-
-        with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
+        with patch("agents.scorer.llm_complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = LLMResponse(
+                content='{"score": 65, "justification": "tiene oportunidades", "category": "tibio"}',
+                model="deepseek-chat"
+            )
             result = await score_lead(sample_dossie, litellm_url="http://test:4000", api_key="test-key", locale=locale)
 
         assert result.get("enrichment_success", True) is True
@@ -100,16 +94,13 @@ class TestESLocaleMessenger:
     @pytest.mark.asyncio
     async def test_generate_message_es_locale(self, sample_scored_lead):
         from agents.messenger import generate_message
-        from agents.factory import ServiceFactory
         locale = get_locale("es")
 
-        mock_llm = AsyncMock()
-        mock_llm.complete.return_value = LLMResponse(
-            content='{"message": "¡Hola! Queremos ayudarte a crecer tu negocio."}',
-            model="deepseek-chat"
-        )
-
-        with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
+        with patch("agents.messenger.llm_complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = LLMResponse(
+                content='{"message": "¡Hola! Queremos ayudarte a crecer tu negocio."}',
+                model="deepseek-chat"
+            )
             result = await generate_message(sample_scored_lead, litellm_url="http://test:4000", api_key="test-key", locale=locale)
 
         assert result is not None
@@ -122,16 +113,13 @@ class TestESLocaleResearcher:
     @pytest.mark.asyncio
     async def test_research_lead_es_locale(self, sample_lead):
         from agents.researcher import research_lead
-        from agents.factory import ServiceFactory
         locale = get_locale("es")
 
-        mock_llm = AsyncMock()
-        mock_llm.complete.return_value = LLMResponse(
-            content='{"pesquisa": "información", "resumo_perfil": "perfil actualizado", "fontes_consultadas": ["google"]}',
-            model="deepseek-chat"
-        )
-
-        with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
+        with patch("agents.researcher.llm_complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = LLMResponse(
+                content='{"pesquisa": "información", "resumo_perfil": "perfil actualizado", "fontes_consultadas": ["google"]}',
+                model="deepseek-chat"
+            )
             result = await research_lead(sample_lead, litellm_url="http://test:4000", api_key="test-key", locale=locale)
 
         assert result is not None
@@ -145,16 +133,13 @@ class TestENLocale:
     @pytest.mark.asyncio
     async def test_enrich_lead_en_locale(self, sample_lead):
         from agents.enricher import enrich_lead
-        from agents.factory import ServiceFactory
         locale = get_locale("en")
 
-        mock_llm = AsyncMock()
-        mock_llm.complete.return_value = LLMResponse(
-            content='{"resumo_perfil": "Family pizzeria", "pontos_fracos": ["no website"], "oportunidades": ["delivery"], "maturidade_digital": "low"}',
-            model="qwen-vl-max"
-        )
-
-        with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
+        with patch("agents.enricher.llm_complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = LLMResponse(
+                content='{"resumo_perfil": "Family pizzeria", "pontos_fracos": ["no website"], "oportunidades": ["delivery"], "maturidade_digital": "low"}',
+                model="qwen-vl-max"
+            )
             result = await enrich_lead(sample_lead, litellm_url="http://test:4000", api_key="test-key", locale=locale)
 
         assert result["enrichment_success"] is True

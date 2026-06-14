@@ -7,9 +7,8 @@ import logging
 from typing import Dict, Any, Optional
 from agents.pure_functions import truncate_message, can_send_message_sync
 from . import runtime
-from .factory import ServiceFactory
-from .ports.llm_client import LLMMessage
-from .ports.whatsapp_gateway import WhatsAppMessage, WhatsAppResponse
+from .llm_client import LLMMessage, llm_complete
+from .whatsapp_client import send_whatsapp, WhatsAppMessage, WhatsAppResponse
 from src.locale import get_locale, LocalePort
 from agents.skeptic import check_agent_output
 
@@ -75,7 +74,6 @@ async def generate_message(
     api_key: str = None,
     locale: Optional[LocalePort] = None,
 ) -> Optional[str]:
-    llm = ServiceFactory.get_llm_client()
     locale = locale or get_locale("pt-BR")
 
     if not can_send_message_sync(lead):
@@ -96,7 +94,7 @@ async def generate_message(
     messages = [LLMMessage(role="user", content=prompt)]
 
     try:
-        response = await llm.complete(
+        response = await llm_complete(
             messages=messages,
             model="deepseek-chat",
             temperature=0.7,
@@ -182,7 +180,7 @@ async def send_whatsapp_message(
     locale: Optional[LocalePort] = None,
 ) -> Dict[str, Any]:
     locale = locale or get_locale("pt-BR")
-    """Dispatcher: routes to the configured WhatsApp gateway via IWhatsAppGateway port."""
+    """Dispatcher: routes to the configured WhatsApp gateway."""
     if not await check_daily_limit():
         logger.warning("Daily message limit reached, skipping send")
         return {
@@ -190,8 +188,6 @@ async def send_whatsapp_message(
             "whatsapp_status": locale.get_status_label("daily_limit"),
             "delivery_status": locale.get_status_label("blocked"),
         }
-    
-    gateway = ServiceFactory.get_whatsapp_gateway()
 
     phone_clean = re.sub(r'\D', '', lead.get("phone", ""))
     if not phone_clean or len(phone_clean) < 10:
@@ -207,7 +203,7 @@ async def send_whatsapp_message(
         session="default"
     )
 
-    result: WhatsAppResponse = await gateway.send_text(msg)
+    result: WhatsAppResponse = await send_whatsapp(msg)
 
     if result.success:
         from datetime import datetime

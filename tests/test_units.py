@@ -3,18 +3,9 @@ Unit tests for the Kirin platform.
 """
 import pytest
 from agents.pure_functions import (
-    normalize_score,
-    classify_faixa,
-    deduplicate_leads,
-    compute_instagram_inativo,
-    truncate_message,
-    is_valid_status,
-    can_send_message_sync
+    deduplicate_leads
 )
-from agents.enricher import _validate_and_structure_dossie, _mark_enrichment_failed
-from agents.scorer import _validate_and_structure_score, _scoring_fallback
-from agents.messenger import _generate_template_message
-from agents.researcher import _mark_research_failed
+from agents.enricher import _validate_and_structure_dossie
 
 
 def test_extractor_fields_present():
@@ -29,12 +20,6 @@ def test_extractor_fields_present():
 def test_enricher_no_site_no_instagram():
     """Test lead without site or Instagram gets low digital maturity"""
     # Test the enricher function's handling of missing website/Instagram
-    lead_data = {
-        "name": "Test Business",
-        "address": "123 Test St",
-        "phone": "555-1234"
-        # No website or instagram_username
-    }
     
     # Mock dossiê data that would be generated
     dossie_data = {
@@ -75,7 +60,6 @@ def test_crm_deduplication():
         {"name": "Business 4"}   # No ID
     ]
     
-    from agents.pure_functions import deduplicate_leads
     result = deduplicate_leads(leads)
     
     # Should have 3 unique leads: id1, id2, and two without IDs

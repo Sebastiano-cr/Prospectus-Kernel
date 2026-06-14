@@ -1,7 +1,6 @@
 """
 Property-based tests for the Kirin platform using Hypothesis.
 """
-import pytest
 from hypothesis import given, strategies as st, settings
 from agents.pure_functions import (
     normalize_score,

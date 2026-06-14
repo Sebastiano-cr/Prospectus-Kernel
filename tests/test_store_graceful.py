@@ -5,7 +5,6 @@ e que ensure_connection reconecta após reconnect do banco.
 """
 import asyncio
 import tempfile
-from unittest.mock import PropertyMock, patch
 
 from src.store import ChromaStore
 

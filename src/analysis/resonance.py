@@ -14,8 +14,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
 from src.analysis.templates import build_resonance_prompt, build_prospect_prompt
-from agents.factory import ServiceFactory
-from agents.ports.llm_client import LLMMessage
+from agents.llm_client import LLMMessage, llm_complete
 from agents.metrics import kirin_resonance_lookup_total, kirin_prospect_generated_total
 from src.store import ChromaStore
 
@@ -51,45 +50,44 @@ async def analyze_resonance(
         logger.warning("analyze_resonance called with empty analyses list")
         return _build_fallback_cluster([], "Empty analyses list")
 
-    llm = ServiceFactory.get_llm_client()
     prompt = build_resonance_prompt(analyses, market_cluster)
     messages = [LLMMessage(role="user", content=prompt)]
 
     for attempt in range(MAX_RETRIES + 1):
         try:
-            response = await llm.complete(
+            response = await llm_complete(
                 messages=messages,
                 model="deepseek-chat",
                 temperature=0.3,
                 max_tokens=1500,
             )
 
-            if response.success:
-                parsed = _parse_cluster_response(response.content)
-                cluster = _validate_cluster(parsed)
-                cluster["source_analysis_count"] = len(analyses)
+            parsed = _parse_cluster_response(response.content)
+            cluster = _validate_cluster(parsed)
+            cluster["source_analysis_count"] = len(analyses)
 
-                if store:
-                    cluster_id = uuid.uuid4().hex[:16]
-                    cluster["cluster_id"] = cluster_id
-                    await store.store_lead_memory(cluster_id, "resonance_cluster", cluster)
-                    text_repr = _build_cluster_text(cluster)
-                    await store.store_text("kirin_discourse", text_repr, {
-                        "cluster_id": cluster_id,
-                        "type": "resonance_cluster",
-                        "market_cluster": cluster.get("market_cluster", "unknown"),
-                    })
+            if store:
+                cluster_id = uuid.uuid4().hex[:16]
+                cluster["cluster_id"] = cluster_id
+                await store.store_lead_memory(cluster_id, "resonance_cluster", cluster)
+                text_repr = _build_cluster_text(cluster)
+                await store.store_text("kirin_discourse", text_repr, {
+                    "cluster_id": cluster_id,
+                    "type": "resonance_cluster",
+                    "market_cluster": cluster.get("market_cluster", "unknown"),
+                })
 
-                kirin_resonance_lookup_total.labels(
-                    market_cluster=cluster.get("market_cluster", "unknown")
-                ).inc()
-                return cluster
+            kirin_resonance_lookup_total.labels(
+                market_cluster=cluster.get("market_cluster", "unknown")
+            ).inc()
+            return cluster
 
+        except Exception as e:
             if attempt < MAX_RETRIES:
-                logger.warning(f"LLM error attempt {attempt + 1}: {response.error}, retrying...")
+                logger.warning(f"LLM error attempt {attempt + 1}: {e}, retrying...")
                 await asyncio.sleep(RETRY_DELAY)
                 continue
-            return _build_fallback_cluster(analyses, f"LLM error: {response.error}")
+            return _build_fallback_cluster(analyses, f"LLM error: {e}")
 
         except Exception as e:
             if attempt < MAX_RETRIES:
@@ -173,37 +171,29 @@ async def generate_prospect(
         logger.warning("generate_prospect called with empty analysis")
         return _build_fallback_prospect({}, "Empty analysis input")
 
-    llm = ServiceFactory.get_llm_client()
     prompt = build_prospect_prompt(analysis, resonance)
     messages = [LLMMessage(role="user", content=prompt)]
 
     for attempt in range(MAX_RETRIES + 1):
         try:
-            response = await llm.complete(
+            response = await llm_complete(
                 messages=messages,
                 model="deepseek-chat",
                 temperature=0.5,
                 max_tokens=800,
             )
 
-            if response.success:
-                parsed = _parse_prospect_response(response.content)
-                prospect = _validate_prospect(parsed)
-                kirin_prospect_generated_total.inc()
-                return prospect
-
-            if attempt < MAX_RETRIES:
-                logger.warning(f"LLM error attempt {attempt + 1}: {response.error}, retrying...")
-                await asyncio.sleep(RETRY_DELAY)
-                continue
-            return _build_fallback_prospect(analysis, f"LLM error: {response.error}")
+            parsed = _parse_prospect_response(response.content)
+            prospect = _validate_prospect(parsed)
+            kirin_prospect_generated_total.inc()
+            return prospect
 
         except Exception as e:
             if attempt < MAX_RETRIES:
-                logger.warning(f"Error attempt {attempt + 1}: {e}, retrying...")
+                logger.warning(f"LLM error attempt {attempt + 1}: {e}, retrying...")
                 await asyncio.sleep(RETRY_DELAY)
                 continue
-            return _build_fallback_prospect(analysis, f"Prospect error: {e}")
+            return _build_fallback_prospect(analysis, f"LLM error: {e}")
 
     return _build_fallback_prospect(analysis, "Unknown error")
 

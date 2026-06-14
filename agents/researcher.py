@@ -8,8 +8,7 @@ from typing import Dict, Any, Optional
 import os
 import logging
 from . import runtime
-from .factory import ServiceFactory
-from .ports.llm_client import LLMMessage, LLMError
+from .llm_client import LLMMessage, LLMError, llm_complete
 from src.locale import get_locale, LocalePort
 from agents.skeptic import check_agent_output
 
@@ -28,14 +27,13 @@ async def research_lead(
     api_key: str = None,
     locale: Optional[LocalePort] = None,
 ) -> Dict[str, Any]:
-    llm = ServiceFactory.get_llm_client()
     locale = locale or get_locale("pt-BR")
     prompt = _build_research_prompt(lead, locale)
     messages = [LLMMessage(role="user", content=prompt)]
 
     for attempt in range(MAX_RETRIES + 1):
         try:
-            response = await llm.complete(
+            response = await llm_complete(
                 messages=messages,
                 model="moonshot-v1-128k",
                 temperature=0.3,

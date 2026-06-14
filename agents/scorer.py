@@ -9,8 +9,7 @@ import logging
 from typing import Dict, Any, Optional
 from agents.pure_functions import normalize_score, truncate_dossie_for_scoring
 from . import runtime
-from .factory import ServiceFactory
-from .ports.llm_client import LLMMessage, LLMError
+from .llm_client import LLMMessage, LLMError, llm_complete
 from src.locale import get_locale, LocalePort
 from agents.skeptic import check_agent_output
 
@@ -32,7 +31,6 @@ async def score_lead(
     api_key: str = None,
     locale: Optional[LocalePort] = None,
 ) -> Dict[str, Any]:
-    llm = ServiceFactory.get_llm_client()
     locale = locale or get_locale("pt-BR")
 
     dossie_trimmed = truncate_dossie_for_scoring(dossie)
@@ -42,7 +40,7 @@ async def score_lead(
 
     for attempt in range(MAX_RETRIES + 1):
         try:
-            response = await llm.complete(
+            response = await llm_complete(
                 messages=messages,
                 model="deepseek-chat",
                 temperature=0.3,

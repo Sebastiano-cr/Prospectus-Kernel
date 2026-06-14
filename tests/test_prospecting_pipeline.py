@@ -4,7 +4,7 @@ Mocka o LLM em cada etapa, verifica compatibilidade de schema entre fases.
 """
 import pytest
 from unittest.mock import AsyncMock, patch
-from agents.ports.llm_client import LLMResponse
+from agents.llm_client import LLMResponse
 
 
 @pytest.fixture
@@ -43,13 +43,10 @@ async def test_full_prospecting_pipeline(sample_lead):
     from agents.enricher import enrich_lead
     from agents.scorer import score_lead
     from agents.messenger import generate_message
-    from agents.factory import ServiceFactory
-
-    mock_llm = AsyncMock()
 
     # ── Fase 1: Enrich ─────────────────────────────────────────────────
-    mock_llm.complete.return_value = LLMResponse(content=LLM_RESPONSES["enricher"], model="qwen-vl-max")
-    with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
+    with patch("agents.enricher.llm_complete", new_callable=AsyncMock) as mock_enrich:
+        mock_enrich.return_value = LLMResponse(content=LLM_RESPONSES["enricher"], model="qwen-vl-max")
         enriched = await enrich_lead(sample_lead, litellm_url="http://test:4000", api_key="test-key")
 
     assert enriched["enrichment_success"] is True
@@ -62,8 +59,8 @@ async def test_full_prospecting_pipeline(sample_lead):
     assert dossie["maturidade_digital"] in ("alto", "médio", "baixo")
 
     # ── Fase 2: Score ──────────────────────────────────────────────────
-    mock_llm.complete.return_value = LLMResponse(content=LLM_RESPONSES["scorer"], model="deepseek-chat")
-    with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
+    with patch("agents.scorer.llm_complete", new_callable=AsyncMock) as mock_score:
+        mock_score.return_value = LLMResponse(content=LLM_RESPONSES["scorer"], model="deepseek-chat")
         scored = await score_lead(dossie, litellm_url="http://test:4000", api_key="test-key")
 
     assert scored.get("enrichment_success", True) is True
@@ -80,8 +77,8 @@ async def test_full_prospecting_pipeline(sample_lead):
         "dossie": dossie,
     }
 
-    mock_llm.complete.return_value = LLMResponse(content=LLM_RESPONSES["messenger"], model="deepseek-chat")
-    with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
+    with patch("agents.messenger.llm_complete", new_callable=AsyncMock) as mock_msg:
+        mock_msg.return_value = LLMResponse(content=LLM_RESPONSES["messenger"], model="deepseek-chat")
         message = await generate_message(scored_lead, litellm_url="http://test:4000", api_key="test-key")
 
     assert message is not None
@@ -89,7 +86,6 @@ async def test_full_prospecting_pipeline(sample_lead):
     assert "Restaurante Teste" in message
 
     # ── Verificação de consistência entre fases ─────────────────────────
-    # O score deve refletir a maturidade digital do dossiê
     assert dossie["maturidade_digital"] == "baixo", "Lead com maturidade baixa deve ter score coerente"
 
 
@@ -99,39 +95,38 @@ async def test_pipeline_with_en_locale(sample_lead):
     from agents.enricher import enrich_lead
     from agents.scorer import score_lead
     from agents.messenger import generate_message
-    from agents.factory import ServiceFactory
     from src.locale import get_locale
 
     locale = get_locale("en")
-    mock_llm = AsyncMock()
 
-    mock_llm.complete.return_value = LLMResponse(
-        content='{"resumo_perfil": "Traditional family restaurant", "pontos_fracos": ["no website"], "oportunidades": ["online delivery"], "maturidade_digital": "low"}',
-        model="qwen-vl-max",
-    )
-    with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
+    with patch("agents.enricher.llm_complete", new_callable=AsyncMock) as mock_enrich:
+        mock_enrich.return_value = LLMResponse(
+            content='{"resumo_perfil": "Traditional family restaurant", "pontos_fracos": ["no website"], "oportunidades": ["online delivery"], "maturidade_digital": "low"}',
+            model="qwen-vl-max",
+        )
         enriched = await enrich_lead(sample_lead, litellm_url="http://test:4000", api_key="test-key", locale=locale)
 
     assert enriched["enrichment_success"] is True
     assert enriched["dossie"]["resumo_perfil"] == "Traditional family restaurant"
 
     dossie = enriched["dossie"]
-    mock_llm.complete.return_value = LLMResponse(
-        content='{"score": 50, "justification": "Medium potential", "faixa": "warm"}',
-        model="deepseek-chat",
-    )
-    with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
+
+    with patch("agents.scorer.llm_complete", new_callable=AsyncMock) as mock_score:
+        mock_score.return_value = LLMResponse(
+            content='{"score": 50, "justification": "Medium potential", "faixa": "warm"}',
+            model="deepseek-chat",
+        )
         scored = await score_lead(dossie, litellm_url="http://test:4000", api_key="test-key", locale=locale)
 
     assert scored["score"] == 50
 
     scored_lead = {**sample_lead, "score": 50, "faixa": "warm", "status": "qualified", "dossie": dossie}
 
-    mock_llm.complete.return_value = LLMResponse(
-        content='{"message": "Hi Restaurante Teste! We noticed your online presence could be stronger. Can we help?"}',
-        model="deepseek-chat",
-    )
-    with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
+    with patch("agents.messenger.llm_complete", new_callable=AsyncMock) as mock_msg:
+        mock_msg.return_value = LLMResponse(
+            content='{"message": "Hi Restaurante Teste! We noticed your online presence could be stronger. Can we help?"}',
+            model="deepseek-chat",
+        )
         message = await generate_message(scored_lead, litellm_url="http://test:4000", api_key="test-key", locale=locale)
 
     assert message is not None
@@ -144,27 +139,22 @@ async def test_pipeline_schema_contract(sample_lead):
     from agents.enricher import enrich_lead
     from agents.scorer import score_lead
     from agents.messenger import generate_message
-    from agents.factory import ServiceFactory
 
-    mock_llm = AsyncMock()
-
-    mock_llm.complete.return_value = LLMResponse(content=LLM_RESPONSES["enricher"], model="qwen-vl-max")
-    with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
+    with patch("agents.enricher.llm_complete", new_callable=AsyncMock) as mock_enrich:
+        mock_enrich.return_value = LLMResponse(content=LLM_RESPONSES["enricher"], model="qwen-vl-max")
         enriched = await enrich_lead(sample_lead, litellm_url="http://test:4000", api_key="test-key")
 
     dossie = enriched["dossie"]
 
-    # O dossie deve ser passável diretamente para o scorer
     assert "resumo_perfil" in dossie
     assert "pontos_fracos" in dossie
     assert "oportunidades" in dossie
     assert "maturidade_digital" in dossie
 
-    mock_llm.complete.return_value = LLMResponse(content=LLM_RESPONSES["scorer"], model="deepseek-chat")
-    with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
+    with patch("agents.scorer.llm_complete", new_callable=AsyncMock) as mock_score:
+        mock_score.return_value = LLMResponse(content=LLM_RESPONSES["scorer"], model="deepseek-chat")
         scored = await score_lead(dossie, litellm_url="http://test:4000", api_key="test-key")
 
-    # O scored_lead para o messenger precisa de: name, score, faixa, dossie
     assert "score" in scored
     assert "faixa" in scored
 
@@ -174,8 +164,8 @@ async def test_pipeline_schema_contract(sample_lead):
     assert "faixa" in scored_lead
     assert "dossie" in scored_lead
 
-    mock_llm.complete.return_value = LLMResponse(content=LLM_RESPONSES["messenger"], model="deepseek-chat")
-    with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
+    with patch("agents.messenger.llm_complete", new_callable=AsyncMock) as mock_msg:
+        mock_msg.return_value = LLMResponse(content=LLM_RESPONSES["messenger"], model="deepseek-chat")
         message = await generate_message(scored_lead, litellm_url="http://test:4000", api_key="test-key")
 
     assert message is not None

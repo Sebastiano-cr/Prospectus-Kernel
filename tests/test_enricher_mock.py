@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from agents.ports.llm_client import LLMResponse
+from agents.llm_client import LLMResponse
 from agents.enricher import _validate_and_structure_dossie, _mark_enrichment_failed
 from agents.messenger import _generate_template_message
 from agents.pure_functions import can_send_message_sync
@@ -15,7 +15,6 @@ class TestEnricherMock:
     async def test_enrich_with_mock_litellm(self, sample_lead):
         """Testa o fluxo completo do enricher mockando o LLM client."""
         from agents.enricher import enrich_lead
-        from agents.factory import ServiceFactory
 
         content = (
             '{\n'
@@ -26,12 +25,10 @@ class TestEnricherMock:
             '}'
         )
 
-        mock_llm = AsyncMock()
-        mock_llm.complete.return_value = LLMResponse(
-            content=content, model="deepseek-chat"
-        )
-
-        with patch.object(ServiceFactory, "get_llm_client", return_value=mock_llm):
+        with patch("agents.enricher.llm_complete", new_callable=AsyncMock) as mock_complete:
+            mock_complete.return_value = LLMResponse(
+                content=content, model="deepseek-chat"
+            )
             result = await enrich_lead(
                 sample_lead,
                 litellm_url="http://test:4000",

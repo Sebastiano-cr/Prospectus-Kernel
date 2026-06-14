@@ -19,8 +19,7 @@ from src.analysis.templates import (
     build_ingestion_prompt,
     build_language_game_prompt,
 )
-from agents.factory import ServiceFactory
-from agents.ports.llm_client import LLMMessage, LLMError
+from agents.llm_client import LLMMessage, LLMError, llm_complete
 from agents.metrics import (
     kirin_discourse_ingested_total,
     kirin_language_game_analyzed_total,
@@ -95,14 +94,13 @@ async def ingest_discourse(
             if cached is not None:
                 return cached
 
-    llm = ServiceFactory.get_llm_client()
     prompt = build_ingestion_prompt(text, source, context)
     messages = [LLMMessage(role="user", content=prompt)]
     timestamp = datetime.now(timezone.utc).isoformat()
 
     for attempt in range(MAX_RETRIES + 1):
         try:
-            response = await llm.complete(
+            response = await llm_complete(
                 messages=messages,
                 model="deepseek-chat",
                 temperature=0.3,
@@ -255,13 +253,12 @@ async def analyze_language_game(
     if store is None:
         from agents import runtime
         store = runtime.get_store()
-    llm = ServiceFactory.get_llm_client()
     prompt = build_language_game_prompt(text, source, context, emotion, topic)
     messages = [LLMMessage(role="user", content=prompt)]
 
     for attempt in range(MAX_RETRIES + 1):
         try:
-            response = await llm.complete(
+            response = await llm_complete(
                 messages=messages,
                 model="deepseek-chat",
                 temperature=0.3,
