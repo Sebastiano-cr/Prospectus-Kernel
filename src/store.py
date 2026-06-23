@@ -1,5 +1,5 @@
 """
-ChromaStore — Unified storage for Kirin using ChromaDB.
+ChromaStore — Unified storage for Prospectus-Kernel using ChromaDB.
 Replaces PostgreSQL + Qdrant + Redis with a single vector database.
 """
 
@@ -56,7 +56,7 @@ class ChromaStore:
     Handles: persistence, vector search, metadata filtering, caching.
     """
 
-    def __init__(self, path: str = "./data/chroma", collection_prefix: str = "kirin_"):
+    def __init__(self, path: str = "./data/chroma", collection_prefix: str = "prospectus_kernel_"):
         self._path = path
         self._prefix = collection_prefix
         self._client: Optional[chromadb.Client] = None

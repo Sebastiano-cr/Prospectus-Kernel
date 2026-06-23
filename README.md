@@ -1,4 +1,4 @@
-# Kirin Platform
+# Prospectus-Kernel
 
 Cognitive runtime platform para prospecção B2B com análise wittgensteiniana de discurso.
 
@@ -104,7 +104,7 @@ await store.initialize()
 await store.store_lead_memory("lead_123", "dossie", dossie)
 
 # Busca vetorial
-results = await store.search_text("kirin_discourse", "crenças sobre preço", limit=5)
+results = await store.search_text("prospectus_kernel_discourse", "crenças sobre preço", limit=5)
 
 # Cache LRU com TTL
 await store.cache_set("daily_count:2026-06-13", 42, ttl_seconds=86400)
@@ -274,7 +274,7 @@ Cobertura atual:
 │           │   └── llm_judge_criteria.prompt.md
 │           └── es/            # Placeholder para expansão
 ├── eval/
-│   ├── kirin_eval_harness.py  # Eval framework (6 dimensões)
+│   ├── prospectus_kernel_eval_harness.py  # Eval framework (6 dimensões)
 │   └── llm_judge.py           # Model-graded judges
 ├── tests/                     # Test suite (7 arquivos)
 ├── docker-compose.yml         # 2 serviços (litellm + agents)
@@ -301,14 +301,14 @@ Cobertura atual:
 ## Monitoramento
 
 Métricas Prometheus em `/metrics`:
-- `kirin_leads_extracted_total` — Leads extraídos
-- `kirin_enrichment_success_total` — Enriquecimentos bem-sucedidos
-- `kirin_enrichment_failed_total` — Enriquecimentos falhos
-- `kirin_lead_score` — Distribuição de scores
-- `kirin_messages_sent_total` — Mensagens por status
-- `kirin_errors_total` — Erros por componente
-- `kirin_active_leads` — Leads ativos
-- `kirin_discourse_ingested_total` — Fragmentos ingeridos
-- `kirin_language_game_analyzed_total` — Análises realizadas
-- `kirin_resonance_lookup_total` — Consultas de ressonância
-- `kirin_prospect_generated_total` — Prospects gerados
+- `prospectus_kernel_leads_extracted_total` — Leads extraídos
+- `prospectus_kernel_enrichment_success_total` — Enriquecimentos bem-sucedidos
+- `prospectus_kernel_enrichment_failed_total` — Enriquecimentos falhos
+- `prospectus_kernel_lead_score` — Distribuição de scores
+- `prospectus_kernel_messages_sent_total` — Mensagens por status
+- `prospectus_kernel_errors_total` — Erros por componente
+- `prospectus_kernel_active_leads` — Leads ativos
+- `prospectus_kernel_discourse_ingested_total` — Fragmentos ingeridos
+- `prospectus_kernel_language_game_analyzed_total` — Análises realizadas
+- `prospectus_kernel_resonance_lookup_total` — Consultas de ressonância
+- `prospectus_kernel_prospect_generated_total` — Prospects gerados

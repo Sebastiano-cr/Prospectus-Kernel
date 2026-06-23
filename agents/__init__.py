@@ -1,5 +1,5 @@
 """
-Kirin Agents Package
+Prospectus-Kernel Agents Package
 """
 from .models import Lead, CampaignConfig
 from .pure_functions import (

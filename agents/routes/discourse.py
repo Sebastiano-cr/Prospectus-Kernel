@@ -11,7 +11,7 @@ from agents.config import (
 from agents.discourse_ingestor import ingest_discourse
 from agents.language_game import analyze_language_game
 from agents.schemas import DiscourseRequest
-from agents.metrics import kirin_errors_total
+from agents.metrics import prospectus_kernel_errors_total
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ async def discourse_ingest_endpoint(request: DiscourseRequest, _=Depends(verify_
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error in discourse ingest endpoint: {e}")
-        kirin_errors_total.labels(component="discourse_ingestor").inc()
+        prospectus_kernel_errors_total.labels(component="discourse_ingestor").inc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -51,5 +51,5 @@ async def discourse_extract_endpoint(request: DiscourseRequest, _=Depends(verify
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error in discourse extract endpoint: {e}")
-        kirin_errors_total.labels(component="discourse_pipeline").inc()
+        prospectus_kernel_errors_total.labels(component="discourse_pipeline").inc()
         raise HTTPException(status_code=500, detail=get_locale(LOCALE_CODE).get_fallback("discourse_error"))

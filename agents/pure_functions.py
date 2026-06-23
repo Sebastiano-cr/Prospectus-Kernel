@@ -1,5 +1,5 @@
 """
-Pure functions for the Kirin platform.
+Pure functions for the Prospectus-Kernel platform.
 These functions are testable without external dependencies.
 """
 

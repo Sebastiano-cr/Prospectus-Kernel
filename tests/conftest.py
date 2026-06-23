@@ -1,5 +1,5 @@
 """
-Fixtures compartilhadas para testes do Kirin platform.
+Fixtures compartilhadas para testes do Prospectus-Kernel.
 
 Fornece mocks para LiteLLM, memory managers e dados de lead,
 permitindo testar a lógica dos agentes sem dependências externas.

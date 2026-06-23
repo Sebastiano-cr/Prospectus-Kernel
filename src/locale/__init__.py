@@ -1,4 +1,4 @@
-"""Portas de localização (LocalePort) para internacionalização do Kirin."""
+"""Portas de localização (LocalePort) para internacionalização do Prospectus-Kernel."""
 from .port import LocalePort
 from .adapters.pt_br import PTBRLocaleAdapter
 from .adapters.es import ESLocaleAdapter

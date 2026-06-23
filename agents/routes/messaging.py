@@ -10,7 +10,7 @@ from agents.config import (
 )
 from agents.messenger import generate_message
 from agents.schemas import MessageRequest
-from agents.metrics import kirin_messages_sent_total, kirin_errors_total
+from agents.metrics import prospectus_kernel_messages_sent_total, prospectus_kernel_errors_total
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -24,11 +24,11 @@ async def generate_message_endpoint(lead: MessageRequest, _=Depends(verify_api_k
         locale = get_locale(LOCALE_CODE)
         message = await generate_message(lead_dict, LITELLM_URL, DEEPSEEK_CHAT_API_KEY, locale)
         if message is not None:
-            kirin_messages_sent_total.labels(status="generated").inc()
+            prospectus_kernel_messages_sent_total.labels(status="generated").inc()
         else:
-            kirin_messages_sent_total.labels(status="discarded").inc()
+            prospectus_kernel_messages_sent_total.labels(status="discarded").inc()
         return {"message": message}
     except Exception as e:
         logger.error(f"Error in generate_message endpoint: {e}")
-        kirin_errors_total.labels(component="messenger").inc()
+        prospectus_kernel_errors_total.labels(component="messenger").inc()
         raise HTTPException(status_code=500, detail=get_locale(LOCALE_CODE).get_fallback("message_error"))

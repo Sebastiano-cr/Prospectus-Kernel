@@ -15,7 +15,7 @@ from typing import Dict, Any, List, Optional
 
 from src.analysis.templates import build_resonance_prompt, build_prospect_prompt
 from agents.llm_client import LLMMessage, llm_complete
-from agents.metrics import kirin_resonance_lookup_total, kirin_prospect_generated_total
+from agents.metrics import prospectus_kernel_resonance_lookup_total, prospectus_kernel_prospect_generated_total
 from src.store import ChromaStore
 
 logger = logging.getLogger(__name__)
@@ -71,13 +71,13 @@ async def analyze_resonance(
                 cluster["cluster_id"] = cluster_id
                 await store.store_lead_memory(cluster_id, "resonance_cluster", cluster)
                 text_repr = _build_cluster_text(cluster)
-                await store.store_text("kirin_discourse", text_repr, {
+                await store.store_text("prospectus_kernel_discourse", text_repr, {
                     "cluster_id": cluster_id,
                     "type": "resonance_cluster",
                     "market_cluster": cluster.get("market_cluster", "unknown"),
                 })
 
-            kirin_resonance_lookup_total.labels(
+            prospectus_kernel_resonance_lookup_total.labels(
                 market_cluster=cluster.get("market_cluster", "unknown")
             ).inc()
             return cluster
@@ -113,13 +113,13 @@ async def lookup_resonance(
     if cached is not None:
         return cached
 
-    results = await store.search_text("kirin_discourse", query, limit)
+    results = await store.search_text("prospectus_kernel_discourse", query, limit)
     clusters = [r for r in results if r.get("type") == "resonance_cluster"]
 
     if clusters:
         await store.cache_set(f"resonance:lookup:{query}:{limit}", clusters, 3600)
 
-    kirin_resonance_lookup_total.labels(market_cluster="lookup").inc()
+    prospectus_kernel_resonance_lookup_total.labels(market_cluster="lookup").inc()
     return clusters
 
 
@@ -185,7 +185,7 @@ async def generate_prospect(
 
             parsed = _parse_prospect_response(response.content)
             prospect = _validate_prospect(parsed)
-            kirin_prospect_generated_total.inc()
+            prospectus_kernel_prospect_generated_total.inc()
             return prospect
 
         except Exception as e:

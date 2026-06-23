@@ -83,9 +83,9 @@ def test_delete_lead_memory(store):
 
 
 def test_store_text_and_search(store):
-    _run(store.store_text("kirin_test", "cliente reclama de preço alto", {"source": "reddit"}))
-    _run(store.store_text("kirin_test", "produto resolveu meu problema", {"source": "telegram"}))
-    results = _run(store.search_text("kirin_test", "reclamação de preço", limit=5))
+    _run(store.store_text("prospectus_kernel_test", "cliente reclama de preço alto", {"source": "reddit"}))
+    _run(store.store_text("prospectus_kernel_test", "produto resolveu meu problema", {"source": "telegram"}))
+    results = _run(store.search_text("prospectus_kernel_test", "reclamação de preço", limit=5))
     assert len(results) >= 1
 
 

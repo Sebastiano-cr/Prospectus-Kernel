@@ -13,7 +13,7 @@ from agents.schemas import (
     ResonanceAnalyzeRequest, ResonanceLookupRequest,
     ResonanceProspectRequest, ResonanceRecordRequest,
 )
-from agents.metrics import kirin_errors_total
+from agents.metrics import prospectus_kernel_errors_total
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ async def resonance_analyze_endpoint(request: ResonanceAnalyzeRequest, _=Depends
         return cluster
     except Exception as e:
         logger.error(f"Error in resonance analyze endpoint: {e}")
-        kirin_errors_total.labels(component="resonance").inc()
+        prospectus_kernel_errors_total.labels(component="resonance").inc()
         raise HTTPException(status_code=500, detail=get_locale(LOCALE_CODE).get_fallback("resonance_error"))
 
 
@@ -43,7 +43,7 @@ async def resonance_lookup_endpoint(request: ResonanceLookupRequest, _=Depends(v
         return {"results": results, "count": len(results)}
     except Exception as e:
         logger.error(f"Error in resonance lookup endpoint: {e}")
-        kirin_errors_total.labels(component="resonance").inc()
+        prospectus_kernel_errors_total.labels(component="resonance").inc()
         raise HTTPException(status_code=500, detail=get_locale(LOCALE_CODE).get_fallback("resonance_lookup_error"))
 
 
@@ -57,7 +57,7 @@ async def prospect_generate_endpoint(request: ResonanceProspectRequest, _=Depend
         return prospect
     except Exception as e:
         logger.error(f"Error in prospect generate endpoint: {e}")
-        kirin_errors_total.labels(component="prospect_generator").inc()
+        prospectus_kernel_errors_total.labels(component="prospect_generator").inc()
         raise HTTPException(status_code=500, detail=get_locale(LOCALE_CODE).get_fallback("prospect_error"))
 
 
@@ -70,5 +70,5 @@ async def resonance_signal_endpoint(request: ResonanceRecordRequest, _=Depends(v
         return signal
     except Exception as e:
         logger.error(f"Error in resonance signal endpoint: {e}")
-        kirin_errors_total.labels(component="resonance").inc()
+        prospectus_kernel_errors_total.labels(component="resonance").inc()
         raise HTTPException(status_code=500, detail=get_locale(LOCALE_CODE).get_fallback("signal_error"))

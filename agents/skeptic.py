@@ -1,5 +1,5 @@
 """
-SkepticAgent — Mecanismo de Desconfiança para o Kirin.
+SkepticAgent — Mecanismo de Desconfiança para o Prospectus-Kernel.
 
 O SkepticAgent é um agente cético que roda APÓS cada LLM call e "cheira" inconsistências.
 Ele não substitui o eval — ele é o filtro abductivo que o eval determinístico não pode ser.

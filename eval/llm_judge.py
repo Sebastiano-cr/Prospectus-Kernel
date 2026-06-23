@@ -1,5 +1,5 @@
 """
-Model-graded judges para o Kirin Eval Harness.
+Model-graded judges para o Prospectus-Kernel Eval Harness.
 Usa LLM (deepseek-chat) como juiz para avaliar a qualidade dos outputs dos agentes.
 
 Diferente dos rules-based judges, estes usam o modelo para avaliar:
@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 
 # Configuração do LLM
 LITELLM_URL = os.getenv("LITELLM_URL", "http://litellm:4000")
-JUDGE_MODEL = os.getenv("KIRIN_JUDGE_MODEL", "deepseek-chat")
-JUDGE_TIMEOUT = int(os.getenv("KIRIN_JUDGE_TIMEOUT", "60"))
-JUDGE_MAX_RETRIES = int(os.getenv("KIRIN_JUDGE_MAX_RETRIES", "3"))
-JUDGE_RETRY_DELAY = float(os.getenv("KIRIN_JUDGE_RETRY_DELAY", "1.0"))
+JUDGE_MODEL = os.getenv("PROSPECTUS_KERNEL_JUDGE_MODEL", "deepseek-chat")
+JUDGE_TIMEOUT = int(os.getenv("PROSPECTUS_KERNEL_JUDGE_TIMEOUT", "60"))
+JUDGE_MAX_RETRIES = int(os.getenv("PROSPECTUS_KERNEL_JUDGE_MAX_RETRIES", "3"))
+JUDGE_RETRY_DELAY = float(os.getenv("PROSPECTUS_KERNEL_JUDGE_RETRY_DELAY", "1.0"))
 
 
 @dataclass

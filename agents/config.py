@@ -1,5 +1,5 @@
 """
-Shared configuration for the Kirin platform API.
+Shared configuration for the Prospectus-Kernel platform API.
 Provides env vars, auth, rate limiter, and locale helpers.
 """
 import os
@@ -23,7 +23,7 @@ CRM_PROVIDER = os.getenv("CRM_PROVIDER", "")
 CHROMA_PATH = os.getenv("CHROMA_PATH", "./data/chroma")
 LOCALE_CODE = os.getenv("LOCALE", "pt-BR")
 API_KEY = os.getenv("API_KEY", "")
-REQUIRE_AUTH = os.getenv("KIRIN_REQUIRE_AUTH", "true").lower() == "true"
+REQUIRE_AUTH = os.getenv("PROSPECTUS_KERNEL_REQUIRE_AUTH", "true").lower() == "true"
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
 
 

@@ -1,5 +1,5 @@
 """
-Researcher Agent for the Kirin platform.
+Researcher Agent for the Prospectus-Kernel platform.
 Uses Moonshot Kimi K2 via ILLMClient port to research leads and find sources.
 """
 import asyncio

@@ -1,5 +1,5 @@
 """
-Unit tests for the Kirin platform.
+Unit tests for the Prospectus-Kernel platform.
 """
 import pytest
 from agents.pure_functions import (

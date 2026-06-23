@@ -1,5 +1,5 @@
 """
-CRM Connector for the Kirin platform.
+CRM Connector for the Prospectus-Kernel platform.
 Provides abstract base class and concrete implementations for various CRM systems.
 """
 import logging

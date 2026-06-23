@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-KIRIN EVAL HARNESS — Framework de Avaliação Abductiva
+PROSPECTUS-KERNEL EVAL HARNESS — Framework de Avaliação Abductiva
 Baseado em Augusto Galego (Groomy, Harness, Evals) + Abdução Sistêmica
 
 Uso:
-    python kirin_eval_harness.py --agent enricher --input lead_sample.json
-    python kirin_eval_harness.py --full-suite
-    python kirin_eval_harness.py --skeptic-only --agent messenger --input msg_input.json
+    python prospectus_kernel_eval_harness.py --agent enricher --input lead_sample.json
+    python prospectus_kernel_eval_harness.py --full-suite
+    python prospectus_kernel_eval_harness.py --skeptic-only --agent messenger --input msg_input.json
 """
 
 import json
@@ -76,8 +76,8 @@ class DimensionResult:
 
 @dataclass
 class EvalReport:
-    """Relatório completo de avaliação do Kirin."""
-    system_name: str = "Kirin Platform"
+    """Relatório completo de avaliação do Prospectus-Kernel."""
+    system_name: str = "Prospectus-Kernel Platform"
     version: str = "2.0"
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
     dimension_results: List[DimensionResult] = field(default_factory=list)
@@ -109,7 +109,7 @@ class EvalReport:
 # ============================================================
 
 class JudgeFactory:
-    """Factory de judges para cada agente do Kirin."""
+    """Factory de judges para cada agente do Prospectus-Kernel."""
 
     @staticmethod
     def create_judge(agent_name: str) -> Callable[[Dict, Dict], JudgeResult]:
@@ -616,9 +616,9 @@ class JudgeFactory:
 # HARNESS PRINCIPAL — Orquestrador de Avaliação
 # ============================================================
 
-class KirinEvalHarness:
+class ProspectusKernelEvalHarness:
     """
-    Harness de avaliação do Kirin.
+    Harness de avaliação do Prospectus-Kernel.
     Orquestra: input → processa → tool calls → output → judge → skeptic → report
     
     Modos de operação:
@@ -656,7 +656,7 @@ class KirinEvalHarness:
         tool_calls: List[Dict]
     ) -> EvalReport:
         """
-        Avalia um agente específico do Kirin.
+        Avalia um agente específico do Prospectus-Kernel.
 
         Args:
             agent_name: Nome do agente (enricher, scorer, messenger, etc.)
@@ -1031,17 +1031,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemplos:
-  python kirin_eval_harness.py --agent enricher --input lead.json
-  python kirin_eval_harness.py --agent messenger --input msg.json --context dossier.json
-  python kirin_eval_harness.py --skeptic-only --agent scorer --input score.json
-  python kirin_eval_harness.py --demo
+  python prospectus_kernel_eval_harness.py --agent enricher --input lead.json
+  python prospectus_kernel_eval_harness.py --agent messenger --input msg.json --context dossier.json
+  python prospectus_kernel_eval_harness.py --skeptic-only --agent scorer --input score.json
+  python prospectus_kernel_eval_harness.py --demo
         """
     )
 
     parser.add_argument("--agent", choices=[
         "enricher", "scorer", "messenger", "researcher",
         "discourse_ingestor", "language_game", "resonance"
-    ], help="Agente do Kirin a avaliar")
+    ], help="Agente do Prospectus-Kernel a avaliar")
 
     parser.add_argument("--input", help="Arquivo JSON com input/output do agente")
     parser.add_argument("--context", help="Arquivo JSON com contexto adicional (lead, dossier, etc.)")
@@ -1049,11 +1049,11 @@ Exemplos:
     parser.add_argument("--skeptic-only", action="store_true", help="Executa apenas o SkepticAgent")
     parser.add_argument("--llm-judge", action="store_true", help="Usa LLM judge (model-graded) em vez de rules-based")
     parser.add_argument("--demo", action="store_true", help="Executa demo com dados de exemplo")
-    parser.add_argument("--output", default="kirin_eval_report.json", help="Arquivo de saída do relatório")
+    parser.add_argument("--output", default="prospectus_kernel_eval_report.json", help="Arquivo de saída do relatório")
 
     args = parser.parse_args()
 
-    harness = KirinEvalHarness(use_llm_judge=args.llm_judge)
+    harness = ProspectusKernelEvalHarness(use_llm_judge=args.llm_judge)
 
     if args.demo:
         _run_demo(harness)
@@ -1129,7 +1129,7 @@ Exemplos:
                 print(f"  - {rec}")
 
 
-def _run_demo(harness: KirinEvalHarness):
+def _run_demo(harness: ProspectusKernelEvalHarness):
     """Executa demo com dados de exemplo."""
     print("=" * 60)
     print("KIRIN EVAL HARNESS — DEMO")

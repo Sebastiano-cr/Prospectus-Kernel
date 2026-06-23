@@ -17,9 +17,9 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - CHROMA_PATH=/data/chroma
     volumes:
-      - kirin_data:/data
+      - prospectus_kernel_data:/data
     depends_on:
       - litellm
 
 volumes:
-  kirin_data:
+  prospectus_kernel_data:

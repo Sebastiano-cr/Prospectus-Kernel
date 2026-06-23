@@ -1,5 +1,5 @@
 """
-Data models for the Kirin platform.
+Data models for the Prospectus-Kernel platform.
 """
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any

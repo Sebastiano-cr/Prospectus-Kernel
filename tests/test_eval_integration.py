@@ -11,8 +11,8 @@ import json
 # Adicionar o diretório raiz ao path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from eval.kirin_eval_harness import (
-    KirinEvalHarness, JudgeFactory, Dimension, EvalReport
+from eval.prospectus_kernel_eval_harness import (
+    ProspectusKernelEvalHarness, JudgeFactory, Dimension, EvalReport
 )
 
 
@@ -20,8 +20,8 @@ from eval.kirin_eval_harness import (
 
 @pytest.fixture
 def harness():
-    """KirinEvalHarness limpo para cada teste."""
-    return KirinEvalHarness(use_llm_judge=False)
+    """ProspectusKernelEvalHarness limpo para cada teste."""
+    return ProspectusKernelEvalHarness(use_llm_judge=False)
 
 
 @pytest.fixture

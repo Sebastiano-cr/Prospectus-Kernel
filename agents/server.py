@@ -1,5 +1,5 @@
 """
-FastAPI app for the Kirin platform agents.
+FastAPI app for the Prospectus-Kernel platform agents.
 Entry point that assembles all route modules.
 """
 import logging
@@ -19,7 +19,7 @@ from agents.routes.resonance import router as resonance_router
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Kirin Agents API", description="API for Kirin platform agents")
+app = FastAPI(title="Prospectus-Kernel API", description="API for Prospectus-Kernel platform agents")
 
 
 @app.exception_handler(Exception)
@@ -35,14 +35,14 @@ async def global_exception_handler(request, exc):
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Starting up Kirin Agents API...")
+    logger.info("Starting up Prospectus-Kernel API...")
     await initialize_memory_managers({"chroma": {"path": CHROMA_PATH}})
     logger.info("Memory managers initialized")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("Shutting down Kirin Agents API...")
+    logger.info("Shutting down Prospectus-Kernel API...")
     await shutdown_memory_managers_async()
     logger.info("Memory managers shut down")
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Launcher para o Kirin Agents API
+# Launcher para o Prospectus-Kernel API
 export PYTHONPATH="${PYTHONPATH}:$(dirname "$0")"
 export LITELLM_URL="${LITELLM_URL:-http://localhost:4000}"
 export DEEPSEEK_CHAT_API_KEY="${DEEPSEEK_CHAT_API_KEY:-test-key}"

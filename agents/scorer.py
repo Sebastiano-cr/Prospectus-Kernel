@@ -1,5 +1,5 @@
 """
-Scorer Agent for the Kirin platform.
+Scorer Agent for the Prospectus-Kernel platform.
 Uses DeepSeek via ILLMClient port to score leads based on dossiê information.
 """
 import asyncio

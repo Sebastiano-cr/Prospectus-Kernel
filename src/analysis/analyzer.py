@@ -21,8 +21,8 @@ from src.analysis.templates import (
 )
 from agents.llm_client import LLMMessage, LLMError, llm_complete
 from agents.metrics import (
-    kirin_discourse_ingested_total,
-    kirin_language_game_analyzed_total,
+    prospectus_kernel_discourse_ingested_total,
+    prospectus_kernel_language_game_analyzed_total,
 )
 from src.store import ChromaStore
 from src.locale import get_locale, LocalePort
@@ -130,7 +130,7 @@ async def ingest_discourse(
                 )
                 await store.store_dedup(_fragment_id(text, source), fragment)
 
-            kirin_discourse_ingested_total.labels(source=source).inc()
+            prospectus_kernel_discourse_ingested_total.labels(source=source).inc()
             return fragment
 
         except LLMError as e:
@@ -285,7 +285,7 @@ async def analyze_language_game(
                     fragment_id, "language_game_analysis", analysis
                 )
 
-            kirin_language_game_analyzed_total.inc()
+            prospectus_kernel_language_game_analyzed_total.inc()
             return analysis
 
         except LLMError as e:

@@ -1,5 +1,5 @@
 """
-Property-based tests for the Kirin platform using Hypothesis.
+Property-based tests for the Prospectus-Kernel platform using Hypothesis.
 """
 from hypothesis import given, strategies as st, settings
 from agents.pure_functions import (

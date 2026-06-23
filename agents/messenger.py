@@ -1,5 +1,5 @@
 """
-Messenger Agent for the Kirin platform.
+Messenger Agent for the Prospectus-Kernel platform.
 Handles message generation via ILLMClient and sending via IWhatsAppGateway.
 """
 import re
@@ -22,7 +22,7 @@ async def check_daily_limit() -> bool:
     if not store:
         return True
     today = datetime.now().strftime("%Y-%m-%d")
-    key = f"kirin:daily_messages:{today}"
+    key = f"prospectus_kernel:daily_messages:{today}"
     cached = await store.cache_get(key)
     count = cached if isinstance(cached, int) else 0
     return count < DAILY_MESSAGE_LIMIT
@@ -33,7 +33,7 @@ async def increment_daily_counter() -> None:
     if not store:
         return
     today = datetime.now().strftime("%Y-%m-%d")
-    key = f"kirin:daily_messages:{today}"
+    key = f"prospectus_kernel:daily_messages:{today}"
     cached = await store.cache_get(key)
     count = (cached if isinstance(cached, int) else 0) + 1
     await store.cache_set(key, count, ttl_seconds=86400)

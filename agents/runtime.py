@@ -1,5 +1,5 @@
 """
-Global runtime state for the Kirin cognitive runtime.
+Global runtime state for the Prospectus-Kernel cognitive runtime.
 Uses ChromaStore as the single unified storage backend.
 """
 import asyncio

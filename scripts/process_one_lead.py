@@ -98,7 +98,7 @@ async def main():
     }
 
     print("=" * 60)
-    print(" Kirin-Prospect · 1 Lead End-to-End (Fase 0)")
+    print(" Prospectus-Kernel · 1 Lead End-to-End (Fase 0)")
     print("=" * 60)
     print(f"Lead: {lead['name']}")
     print(f"LLM:  Ollama ({OLLAMA_MODEL})")

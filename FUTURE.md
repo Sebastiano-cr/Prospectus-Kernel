@@ -1,4 +1,4 @@
-# Kirin-Prospect — Simplificação Planejada
+# Prospectus-Kernel — Simplificação Planejada
 
 ## Motivação
 Reduzir overengineering hexagonal sem perder diferenciais:

@@ -1,10 +1,10 @@
 """
-KIRIN EVAL — Framework de Avaliação Abductiva
+PROSPECTUS-KERNEL EVAL — Framework de Avaliação Abductiva
 Baseado em Augusto Galego (Groomy, Harness, Evals) + Abdução Sistêmica
 """
 
-from .kirin_eval_harness import (
-    KirinEvalHarness,
+from .prospectus_kernel_eval_harness import (
+    ProspectusKernelEvalHarness,
     SkepticAgent,
     JudgeFactory,
     Dimension,
@@ -21,7 +21,7 @@ from .llm_judge import (
 )
 
 __all__ = [
-    "KirinEvalHarness",
+    "ProspectusKernelEvalHarness",
     "SkepticAgent",
     "JudgeFactory",
     "Dimension",

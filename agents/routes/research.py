@@ -11,7 +11,7 @@ from agents.config import (
 from agents.researcher import research_lead
 from agents.crm_connector import get_crm_adapter
 from agents.schemas import ResearchRequest, CRMSyncRequest
-from agents.metrics import kirin_errors_total
+from agents.metrics import prospectus_kernel_errors_total
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ async def research_endpoint(lead: ResearchRequest, _=Depends(verify_api_key), __
         return researched_lead
     except Exception as e:
         logger.error(f"Error in research endpoint: {e}")
-        kirin_errors_total.labels(component="researcher").inc()
+        prospectus_kernel_errors_total.labels(component="researcher").inc()
         raise HTTPException(status_code=500, detail=get_locale(LOCALE_CODE).get_fallback("research_error"))
 
 
@@ -49,5 +49,5 @@ async def crm_sync_endpoint(lead: CRMSyncRequest, _=Depends(verify_api_key), __=
         return result
     except Exception as e:
         logger.error(f"Error in crm_sync endpoint: {e}")
-        kirin_errors_total.labels(component="crm_connector").inc()
+        prospectus_kernel_errors_total.labels(component="crm_connector").inc()
         raise HTTPException(status_code=500, detail=get_locale(LOCALE_CODE).get_fallback("crm_error"))

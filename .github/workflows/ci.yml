@@ -1,4 +1,4 @@
-name: Kirin CI
+name: Prospectus-Kernel CI
 
 on:
   push:

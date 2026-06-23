@@ -1,5 +1,5 @@
 """
-Enricher Agent for the Kirin platform.
+Enricher Agent for the Prospectus-Kernel platform.
 Uses Qwen VL Max via ILLMClient port to enrich lead data with dossiê information.
 """
 import asyncio
